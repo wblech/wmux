@@ -1,0 +1,32 @@
+linters:
+  enable:
+    # Formatting
+    - gofmt
+    - goimports
+    # Bugs
+    - govet
+    - staticcheck
+    - errcheck
+    # Naming (replace rules removed from goframe)
+    - revive
+    - stylecheck
+    # Code smells
+    - gocritic
+    - exhaustruct
+    # Error handling
+    - wrapcheck
+    - errorlint
+    # Testing
+    - testifylint
+
+linters-settings:
+  revive:
+    rules:
+      - name: var-naming
+      - name: exported
+  gocritic:
+    enabled-checks:
+      - newDeref
+  exhaustruct:
+    exclude:
+      - ".*_test\\.go"

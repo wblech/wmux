@@ -1,0 +1,19 @@
+repos:
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.1.6
+    hooks:
+      - id: golangci-lint
+  - repo: local
+    hooks:
+      - id: goframe-check
+        name: goframe check
+        entry: goframe check
+        language: system
+        pass_filenames: false
+        types: [go]
+      - id: coverage-check
+        name: coverage check (90% on changed packages)
+        entry: scripts/check-coverage.sh
+        language: script
+        pass_filenames: false
+        types: [go]

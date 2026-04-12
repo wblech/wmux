@@ -1,0 +1,8 @@
+# goframe configuration
+# Documentation: https://github.com/wlech/goframe
+#
+# allow:
+#   - "internal/*/helpers.go"    # allow non-standard files in domains
+#
+# ignore:
+#   - "internal/legacy/*"        # skip validation for legacy packages
