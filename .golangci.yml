@@ -1,15 +1,18 @@
-linters:
+version: "2"
+
+formatters:
   enable:
-    # Formatting
     - gofmt
     - goimports
+
+linters:
+  enable:
     # Bugs
     - govet
     - staticcheck
     - errcheck
-    # Naming (replace rules removed from goframe)
+    # Naming
     - revive
-    - stylecheck
     # Code smells
     - gocritic
     - exhaustruct
