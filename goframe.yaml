@@ -8,6 +8,8 @@ allow:
   - "internal/session/emulator.go"
   - "internal/session/backpressure.go"
   - "internal/session/batcher.go"
+  - "internal/session/reaper.go"
+  - "internal/session/watchdog.go"
   - "internal/transport/ppid_darwin.go"
   - "internal/transport/ppid_linux.go"
   - "internal/transport/heartbeat.go"

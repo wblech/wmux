@@ -1,6 +1,7 @@
 package session
 
 import (
+	"fmt"
 	"runtime"
 	"sync"
 	"testing"
@@ -495,4 +496,51 @@ func TestService_ReadOutputAfterWrite(t *testing.T) {
 	}
 
 	assert.NotEmpty(t, output)
+}
+
+func TestService_SpawnSemaphore(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{}, WithSpawnSemaphore(1))
+
+	_, err := svc.Create("sem-1", defaultCreateOpts())
+	require.NoError(t, err)
+
+	_, err = svc.Create("sem-2", defaultCreateOpts())
+	require.NoError(t, err)
+}
+
+func TestService_SpawnSemaphoreConcurrency(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{}, WithSpawnSemaphore(1))
+
+	done := make(chan error, 3)
+	for i := range 3 {
+		go func(idx int) {
+			id := fmt.Sprintf("conc-%d", idx)
+			_, err := svc.Create(id, defaultCreateOpts())
+			done <- err
+		}(i)
+	}
+
+	for range 3 {
+		err := <-done
+		require.NoError(t, err)
+	}
+
+	sessions := svc.List()
+	assert.Len(t, sessions, 3)
+}
+
+func TestService_SpawnSemaphoreZero(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{}, WithSpawnSemaphore(0))
+
+	_, err := svc.Create("no-limit", defaultCreateOpts())
+	assert.NoError(t, err)
 }

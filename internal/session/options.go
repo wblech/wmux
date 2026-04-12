@@ -14,3 +14,13 @@ func WithMaxSessions(n int) Option {
 func WithOnExit(fn func(id string, exitCode int)) Option {
 	return func(s *Service) { s.onExit = fn }
 }
+
+// WithSpawnSemaphore limits the number of concurrent session spawns.
+// A value of zero or less means no limit.
+func WithSpawnSemaphore(n int) Option {
+	return func(s *Service) {
+		if n > 0 {
+			s.spawnSem = make(chan struct{}, n)
+		}
+	}
+}

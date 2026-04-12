@@ -83,6 +83,7 @@ type Service struct {
 	spawner     pty.Spawner
 	maxSessions int
 	onExit      func(id string, exitCode int)
+	spawnSem    chan struct{}
 }
 
 // NewService creates a new Service backed by the given Spawner.
@@ -94,6 +95,7 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 		spawner:     spawner,
 		maxSessions: 0,
 		onExit:      nil,
+		spawnSem:    nil,
 	}
 
 	for _, o := range opts {
@@ -109,6 +111,12 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 	if err := ValidateSessionID(id); err != nil {
 		return nil, err
+	}
+
+	// Acquire spawn slot. Blocks if the semaphore is full (FIFO queue).
+	if s.spawnSem != nil {
+		s.spawnSem <- struct{}{}
+		defer func() { <-s.spawnSem }()
 	}
 
 	s.mu.Lock()
