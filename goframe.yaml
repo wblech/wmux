@@ -4,6 +4,7 @@
 allow:
   - "internal/daemon/autodaemon.go"
   - "internal/daemon/pidfile.go"
+  - "internal/daemon/reconcile.go"
   - "internal/daemon/shutdown.go"
   - "internal/session/emulator.go"
   - "internal/session/backpressure.go"
