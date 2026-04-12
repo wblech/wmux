@@ -150,6 +150,86 @@ func TestLoad_FileNotFound(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestLoad_UnmarshalError(t *testing.T) {
+	// koanf returns an error if the TOML is malformed.
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "wmux.toml")
+	require.NoError(t, os.WriteFile(path, []byte("not = [valid toml"), 0o600))
+
+	_, err := Load(path)
+	require.Error(t, err)
+}
+
+func TestWatch_FileNotFound(t *testing.T) {
+	_, err := Watch("/nonexistent/path/wmux.toml", func(_ *Config) {})
+	require.Error(t, err)
+}
+
+func TestFileHash_FileNotFound(t *testing.T) {
+	_, err := fileHash("/nonexistent/path/file.toml")
+	require.Error(t, err)
+}
+
+func TestFileHash_ReturnsConsistentHash(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "test.toml")
+	require.NoError(t, os.WriteFile(path, []byte("hello"), 0o600))
+
+	h1, err := fileHash(path)
+	require.NoError(t, err)
+	h2, err := fileHash(path)
+	require.NoError(t, err)
+	assert.Equal(t, h1, h2)
+	assert.NotEmpty(t, h1)
+}
+
+func TestFileHash_ChangesOnContentChange(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "test.toml")
+	require.NoError(t, os.WriteFile(path, []byte("version = 1"), 0o600))
+
+	h1, err := fileHash(path)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(path, []byte("version = 2"), 0o600))
+
+	h2, err := fileHash(path)
+	require.NoError(t, err)
+	assert.NotEqual(t, h1, h2)
+}
+
+func TestWatch_IgnoresInvalidConfigOnChange(t *testing.T) {
+	tmp := t.TempDir()
+	path := filepath.Join(tmp, "wmux.toml")
+
+	initial := `
+[daemon]
+socket = "/tmp/initial.sock"
+`
+	require.NoError(t, os.WriteFile(path, []byte(initial), 0o600))
+
+	called := make(chan struct{}, 1)
+	stop, err := Watch(path, func(_ *Config) {
+		called <- struct{}{}
+	})
+	require.NoError(t, err)
+	defer stop()
+
+	// Give the watcher time to register the initial state.
+	time.Sleep(600 * time.Millisecond)
+
+	// Write invalid TOML — Watch goroutine should handle the Load error gracefully.
+	require.NoError(t, os.WriteFile(path, []byte("not = [valid toml"), 0o600))
+
+	// onChange should NOT be called since the config is invalid.
+	select {
+	case <-called:
+		t.Fatal("onChange should not be called for invalid config")
+	case <-time.After(1500 * time.Millisecond):
+		// expected: no callback
+	}
+}
+
 func TestWatch_ReloadsOnChange(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "wmux.toml")

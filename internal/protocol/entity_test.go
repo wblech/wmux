@@ -42,3 +42,8 @@ func TestFrame_HeaderSize(t *testing.T) {
 func TestVersion(t *testing.T) {
 	assert.Equal(t, byte(1), ProtocolVersion)
 }
+
+func TestMessageType_String_Unknown(t *testing.T) {
+	unknown := MessageType(0xFF)
+	assert.Equal(t, "unknown", unknown.String())
+}
