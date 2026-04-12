@@ -71,6 +71,7 @@ func (a *testSessionAdapter) Create(id string, opts SessionCreateOptions) (Sessi
 		HighWatermark: 0,
 		LowWatermark:  0,
 		BatchInterval: 0,
+		HistoryWriter: nil,
 	})
 	if err != nil {
 		return SessionInfo{}, err //nolint:wrapcheck

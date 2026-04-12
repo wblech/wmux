@@ -99,4 +99,6 @@ var (
 	ErrMaxSessions = errors.New("maximum number of sessions reached")
 	// ErrBufferFull is returned when the session output buffer is full.
 	ErrBufferFull = errors.New("session buffer full")
+	// ErrSessionNotAlive is returned when trying to attach to a non-alive session.
+	ErrSessionNotAlive = errors.New("session not alive or detached")
 )

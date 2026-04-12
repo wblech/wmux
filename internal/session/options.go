@@ -8,3 +8,9 @@ type Option func(*Service)
 func WithMaxSessions(n int) Option {
 	return func(s *Service) { s.maxSessions = n }
 }
+
+// WithOnExit registers a callback invoked when a session's process exits.
+// The callback receives the session ID and exit code.
+func WithOnExit(fn func(id string, exitCode int)) Option {
+	return func(s *Service) { s.onExit = fn }
+}

@@ -2,6 +2,7 @@ package session
 
 import (
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,6 +28,7 @@ func defaultCreateOpts() CreateOptions {
 		HighWatermark: 0,
 		LowWatermark:  0,
 		BatchInterval: 5 * time.Millisecond,
+		HistoryWriter: nil,
 	}
 }
 
@@ -213,6 +215,7 @@ func TestService_ProcessExitDetected(t *testing.T) {
 		HighWatermark: 0,
 		LowWatermark:  0,
 		BatchInterval: 5 * time.Millisecond,
+		HistoryWriter: nil,
 	}
 
 	_, err := svc.Create("exit-session", opts)
@@ -262,6 +265,7 @@ func TestService_CreateDefaultDimensions(t *testing.T) {
 		HighWatermark: 0, // should default to defaultHighWatermark
 		LowWatermark:  0, // should default to defaultLowWatermark
 		BatchInterval: 0, // should default to defaultBatchInterval
+		HistoryWriter: nil,
 	}
 
 	sess, err := svc.Create("default-dims", opts)
@@ -329,6 +333,139 @@ func TestService_ReadOutputNotFound(t *testing.T) {
 
 	_, err := svc.ReadOutput("no-such-session")
 	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_AttachDetach(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.Create("ad-1", defaultCreateOpts())
+	require.NoError(t, err)
+
+	sess, err := svc.Get("ad-1")
+	require.NoError(t, err)
+	assert.Equal(t, StateAlive, sess.State)
+
+	err = svc.Detach("ad-1")
+	require.NoError(t, err)
+	sess, err = svc.Get("ad-1")
+	require.NoError(t, err)
+	assert.Equal(t, StateDetached, sess.State)
+
+	err = svc.Attach("ad-1")
+	require.NoError(t, err)
+	sess, err = svc.Get("ad-1")
+	require.NoError(t, err)
+	assert.Equal(t, StateAlive, sess.State)
+}
+
+func TestService_AttachNotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	assert.ErrorIs(t, svc.Attach("ghost"), ErrSessionNotFound)
+}
+
+func TestService_DetachNotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	assert.ErrorIs(t, svc.Detach("ghost"), ErrSessionNotFound)
+}
+
+func TestService_LastActivity(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.Create("act-1", defaultCreateOpts())
+	require.NoError(t, err)
+
+	lastAct, err := svc.LastActivity("act-1")
+	require.NoError(t, err)
+	assert.WithinDuration(t, time.Now(), lastAct, 2*time.Second)
+}
+
+func TestService_LastActivityNotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.LastActivity("ghost")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_HistoryWriter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	var mu sync.Mutex
+	var captured []byte
+	writer := &testCaptureWriter{mu: &mu, data: &captured}
+
+	svc := NewService(&pty.UnixSpawner{})
+	opts := defaultCreateOpts()
+	opts.HistoryWriter = writer
+
+	_, err := svc.Create("hist-1", opts)
+	require.NoError(t, err)
+
+	err = svc.WriteInput("hist-1", []byte("echo test\n"))
+	require.NoError(t, err)
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		got := len(captured) > 0
+		mu.Unlock()
+		if got {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	mu.Lock()
+	assert.NotEmpty(t, captured)
+	mu.Unlock()
+}
+
+func TestService_OnExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	exitCh := make(chan int, 1)
+	svc := NewService(&pty.UnixSpawner{}, WithOnExit(func(_ string, exitCode int) {
+		exitCh <- exitCode
+	}))
+
+	opts := CreateOptions{
+		Shell:         "/bin/sh",
+		Args:          []string{"-c", "exit 42"},
+		Cols:          80,
+		Rows:          24,
+		Cwd:           "",
+		Env:           nil,
+		HighWatermark: 0,
+		LowWatermark:  0,
+		BatchInterval: 5 * time.Millisecond,
+		HistoryWriter: nil,
+	}
+	_, err := svc.Create("exit-cb", opts)
+	require.NoError(t, err)
+
+	select {
+	case code := <-exitCh:
+		assert.Equal(t, 42, code)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for OnExit callback")
+	}
+}
+
+// testCaptureWriter is a test io.Writer that stores written bytes.
+type testCaptureWriter struct {
+	mu   *sync.Mutex
+	data *[]byte
+}
+
+func (w *testCaptureWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	*w.data = append(*w.data, p...)
+	return len(p), nil
 }
 
 func TestService_ReadOutputAfterWrite(t *testing.T) {

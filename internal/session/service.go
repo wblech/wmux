@@ -2,7 +2,9 @@ package session
 
 import (
 	"fmt"
+	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/wblech/wmux/internal/platform/pty"
@@ -57,16 +59,21 @@ type CreateOptions struct {
 	LowWatermark int
 	// BatchInterval is how often the batcher flushes output to the buffer.
 	BatchInterval time.Duration
+	// HistoryWriter receives raw PTY output for history persistence.
+	// May be nil if history writing is not needed.
+	HistoryWriter io.Writer
 }
 
 // managedSession groups a Session with its runtime resources.
 type managedSession struct {
-	session   *Session
-	process   *pty.Process
-	emulator  ScreenEmulator
-	buffer    *Buffer
-	batcher   *Batcher
-	closeOnce sync.Once
+	session       *Session
+	process       *pty.Process
+	emulator      ScreenEmulator
+	buffer        *Buffer
+	batcher       *Batcher
+	historyWriter io.Writer    // may be nil
+	lastActivity  atomic.Int64 // unix nanos of last PTY output
+	closeOnce     sync.Once
 }
 
 // Service manages the lifecycle of terminal sessions.
@@ -75,6 +82,7 @@ type Service struct {
 	sessions    map[string]*managedSession
 	spawner     pty.Spawner
 	maxSessions int
+	onExit      func(id string, exitCode int)
 }
 
 // NewService creates a new Service backed by the given Spawner.
@@ -85,6 +93,7 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 		sessions:    make(map[string]*managedSession),
 		spawner:     spawner,
 		maxSessions: 0,
+		onExit:      nil,
 	}
 
 	for _, o := range opts {
@@ -169,13 +178,16 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 	}
 
 	ms := &managedSession{
-		session:   sess,
-		process:   proc,
-		emulator:  NoneEmulator{},
-		buffer:    buf,
-		batcher:   batcher,
-		closeOnce: sync.Once{},
+		session:       sess,
+		process:       proc,
+		emulator:      NoneEmulator{},
+		buffer:        buf,
+		batcher:       batcher,
+		historyWriter: opts.HistoryWriter,
+		lastActivity:  atomic.Int64{},
+		closeOnce:     sync.Once{},
 	}
+	ms.lastActivity.Store(time.Now().UnixNano())
 
 	s.sessions[id] = ms
 
@@ -234,6 +246,58 @@ func (s *Service) Kill(id string) error {
 	})
 
 	return nil
+}
+
+// Attach transitions the session from StateDetached to StateAlive.
+func (s *Service) Attach(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ms, ok := s.sessions[id]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	if ms.session.State == StateDetached {
+		ms.session.State = StateAlive
+	}
+	return nil
+}
+
+// Detach transitions the session from StateAlive to StateDetached.
+func (s *Service) Detach(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ms, ok := s.sessions[id]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	if ms.session.State == StateAlive {
+		ms.session.State = StateDetached
+	}
+	return nil
+}
+
+// LastActivity returns the time of the most recent PTY output for the session.
+// If no output has been produced yet, returns the session's StartedAt time.
+func (s *Service) LastActivity(id string) (time.Time, error) {
+	s.mu.RLock()
+	ms, ok := s.sessions[id]
+	s.mu.RUnlock()
+	if !ok {
+		return time.Time{}, ErrSessionNotFound
+	}
+	nanos := ms.lastActivity.Load()
+	if nanos == 0 {
+		return ms.session.StartedAt, nil
+	}
+	return time.Unix(0, nanos), nil
+}
+
+// OnExit registers a callback invoked when a session's process exits.
+// Replaces any previously registered callback.
+func (s *Service) OnExit(fn func(id string, exitCode int)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onExit = fn
 }
 
 // Resize updates the terminal dimensions of the session identified by id.
@@ -326,6 +390,10 @@ func (s *Service) readLoop(ms *managedSession) {
 			copy(chunk, buf[:n])
 			ms.batcher.Add(chunk)
 			ms.emulator.Process(chunk)
+			if ms.historyWriter != nil {
+				_, _ = ms.historyWriter.Write(chunk)
+			}
+			ms.lastActivity.Store(time.Now().UnixNano())
 		}
 
 		if err != nil {
@@ -345,10 +413,21 @@ func (s *Service) waitLoop(ms *managedSession) {
 	ms.session.EndedAt = time.Now()
 	ms.session.State = StateExited
 	delete(s.sessions, ms.session.ID)
+	onExit := s.onExit
 	s.mu.Unlock()
 
 	ms.batcher.Stop()
 	ms.closeOnce.Do(func() {
 		ms.process.Close() //nolint:errcheck
 	})
+
+	if ms.historyWriter != nil {
+		if closer, ok := ms.historyWriter.(io.Closer); ok {
+			_ = closer.Close()
+		}
+	}
+
+	if onExit != nil {
+		onExit(ms.session.ID, exitCode)
+	}
 }
