@@ -6,16 +6,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEventType_String(t *testing.T) {
+func TestType_String(t *testing.T) {
 	tests := []struct {
-		et   EventType
+		et   Type
 		want string
 	}{
 		{SessionCreated, "session.created"},
 		{SessionAttached, "session.attached"},
 		{SessionDetached, "session.detached"},
 		{SessionExited, "session.exited"},
-		{EventType(99), "unknown"},
+		{Type(99), "unknown"},
 	}
 
 	for _, tt := range tests {

@@ -98,7 +98,7 @@ func TestBus_Unsubscribe(t *testing.T) {
 	}
 }
 
-func TestBus_DoubleUnsubscribe(t *testing.T) {
+func TestBus_DoubleUnsubscribe(_ *testing.T) {
 	bus := NewBus()
 	defer bus.Close()
 
@@ -117,7 +117,7 @@ func TestBus_Close(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestBus_PublishAfterClose(t *testing.T) {
+func TestBus_PublishAfterClose(_ *testing.T) {
 	bus := NewBus()
 	bus.Close()
 
@@ -174,7 +174,7 @@ func TestSubscription_EventsReturnsChannel(t *testing.T) {
 	require.NotNil(t, ch)
 }
 
-func TestBus_DoubleClose(t *testing.T) {
+func TestBus_DoubleClose(_ *testing.T) {
 	bus := NewBus()
 	bus.Close()
 	bus.Close() // should not panic

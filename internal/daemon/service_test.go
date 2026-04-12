@@ -1079,7 +1079,7 @@ func TestDaemon_EmitsAttachDetachEvents(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	events := eb.Events()
-	types := make([]event.EventType, 0, len(events))
+	types := make([]event.Type, 0, len(events))
 	for _, e := range events {
 		types = append(types, e.Type)
 	}

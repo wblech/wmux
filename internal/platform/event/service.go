@@ -12,7 +12,7 @@ const (
 type Subscription struct {
 	ch     chan Event
 	bus    *Bus
-	filter map[EventType]struct{} // nil = all events
+	filter map[Type]struct{} // nil = all events
 	once   sync.Once
 }
 
@@ -53,15 +53,15 @@ func (b *Bus) Subscribe() *Subscription {
 }
 
 // SubscribeTypes registers a subscriber that receives only the specified event types.
-func (b *Bus) SubscribeTypes(types ...EventType) *Subscription {
-	filter := make(map[EventType]struct{}, len(types))
+func (b *Bus) SubscribeTypes(types ...Type) *Subscription {
+	filter := make(map[Type]struct{}, len(types))
 	for _, t := range types {
 		filter[t] = struct{}{}
 	}
 	return b.subscribe(filter)
 }
 
-func (b *Bus) subscribe(filter map[EventType]struct{}) *Subscription {
+func (b *Bus) subscribe(filter map[Type]struct{}) *Subscription {
 	sub := &Subscription{
 		ch:     make(chan Event, subscriberBufferSize),
 		bus:    b,

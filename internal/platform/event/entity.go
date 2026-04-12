@@ -3,12 +3,12 @@ package event
 
 import "errors"
 
-// EventType identifies the kind of event.
-type EventType int
+// Type identifies the kind of event.
+type Type int
 
 // Phase 1 lifecycle event types.
 const (
-	_ EventType = iota
+	_ Type = iota
 	// SessionCreated is emitted when a new session is spawned.
 	SessionCreated
 	// SessionAttached is emitted when a client attaches to a session.
@@ -20,7 +20,7 @@ const (
 )
 
 // String returns the dot-notation name of the event type.
-func (t EventType) String() string {
+func (t Type) String() string {
 	switch t {
 	case SessionCreated:
 		return "session.created"
@@ -38,7 +38,7 @@ func (t EventType) String() string {
 // Event represents a single lifecycle event emitted by the daemon.
 type Event struct {
 	// Type identifies the event kind.
-	Type EventType `json:"type"`
+	Type Type `json:"type"`
 	// SessionID is the session this event relates to.
 	SessionID string `json:"session_id"`
 	// Payload contains event-specific data as key-value pairs.
