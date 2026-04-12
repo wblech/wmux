@@ -1,7 +1,9 @@
+// Package main implements the wmux CLI binary.
 package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -597,7 +599,7 @@ func cmdEvents(args []string) int {
 	for {
 		frame, readErr := conn.ReadFrame()
 		if readErr != nil {
-			if readErr != io.EOF {
+			if !errors.Is(readErr, io.EOF) {
 				fmt.Fprintf(os.Stderr, "error: %v\n", readErr)
 			}
 			return 0

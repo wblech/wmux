@@ -178,6 +178,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 		}
 	}
 
+	if d.dataDir != "" {
+		_, _ = ReconcileOrphans(d.dataDir)
+	}
+
 	childCtx, cancel := context.WithCancel(ctx)
 	d.mu.Lock()
 	d.cancelFunc = cancel
