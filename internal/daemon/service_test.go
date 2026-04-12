@@ -1120,3 +1120,90 @@ func TestDaemon_Status(t *testing.T) {
 	assert.Equal(t, 1, sr.SessionCount)
 	assert.NotEmpty(t, sr.Uptime)
 }
+
+func TestDaemon_EventSubscribeReceivesEvents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	eb := newTestEventBus()
+	d, token, sock := testDaemon(t, WithEventBus(eb))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Subscribe to events.
+	resp := sendControl(t, ctrl, protocol.MsgEvent, nil)
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	// Create a session to trigger an event.
+	ctrl2, _ := dialControl(t, sock, token)
+	defer ctrl2.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl2, protocol.MsgCreate, CreateRequest{
+		ID:    "sub-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Read the event from the subscription.
+	ctrl.Raw().SetReadDeadline(time.Now().Add(3 * time.Second)) //nolint:errcheck
+	evtFrame, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgEvent, evtFrame.Type)
+
+	var evt struct {
+		SessionID string `json:"session_id"`
+	}
+	require.NoError(t, json.Unmarshal(evtFrame.Payload, &evt))
+	assert.Equal(t, "sub-sess", evt.SessionID)
+}
+
+func TestDaemon_EventSubscribeNoEventBus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	// No WithEventBus — eventBus is nil.
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgEvent, nil)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_EventSubscribeInvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	eb := newTestEventBus()
+	d, token, sock := testDaemon(t, WithEventBus(eb))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgEvent,
+		Payload: []byte("{bad json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
