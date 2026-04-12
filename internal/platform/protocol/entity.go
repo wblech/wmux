@@ -30,6 +30,8 @@ const (
 	MsgError        MessageType = 0x0D
 	MsgOK           MessageType = 0x0E
 	MsgShutdown     MessageType = 0x0F
+	MsgAuth         MessageType = 0x10
+	MsgStatus       MessageType = 0x11
 )
 
 // String returns the lowercase name of the message type.
@@ -65,6 +67,10 @@ func (m MessageType) String() string {
 		return "ok"
 	case MsgShutdown:
 		return "shutdown"
+	case MsgAuth:
+		return "auth"
+	case MsgStatus:
+		return "status"
 	default:
 		return "unknown"
 	}

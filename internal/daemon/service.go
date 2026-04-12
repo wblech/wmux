@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wblech/wmux/internal/platform/event"
 	"github.com/wblech/wmux/internal/platform/protocol"
 )
 
@@ -23,6 +24,14 @@ const (
 // Repository is unused here — kept for goframe compliance. Daemon has no
 // persistent repository; it delegates to the SessionManager and Server.
 type Repository interface{}
+
+// EventBus abstracts event bus operations for the daemon.
+type EventBus interface {
+	// Publish sends an event to all subscribers.
+	Publish(e event.Event)
+	// Subscribe returns a subscription that receives all events.
+	Subscribe() *event.Subscription
+}
 
 // SessionCreateOptions holds the parameters forwarded to the session backend.
 type SessionCreateOptions struct {
@@ -120,6 +129,8 @@ type Daemon struct {
 	cancelFunc    context.CancelFunc
 	attachments   map[string]map[string]struct{} // session_id -> set of client_ids
 	clientSession map[string]string              // client_id -> session_id
+	eventBus      EventBus                       // may be nil
+	startedAt     time.Time
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -136,6 +147,8 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		cancelFunc:    nil,
 		attachments:   make(map[string]map[string]struct{}),
 		clientSession: make(map[string]string),
+		eventBus:      nil,
+		startedAt:     time.Time{},
 	}
 
 	for _, o := range opts {
@@ -149,6 +162,10 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 // It writes the PID file (if configured), registers the OnClient callback,
 // starts the output broadcaster, and then blocks on server.Serve.
 func (d *Daemon) Start(ctx context.Context) error {
+	d.mu.Lock()
+	d.startedAt = time.Now()
+	d.mu.Unlock()
+
 	if d.pidFilePath != "" {
 		info := Info{
 			PID:       os.Getpid(),
@@ -165,6 +182,14 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.mu.Lock()
 	d.cancelFunc = cancel
 	d.mu.Unlock()
+
+	d.sessionSvc.OnExit(func(id string, exitCode int) {
+		d.publishEvent(event.Event{
+			Type:      event.SessionExited,
+			SessionID: id,
+			Payload:   map[string]any{"exit_code": exitCode},
+		})
+	})
 
 	d.server.OnClient(func(c ConnectedClient) {
 		go d.readControl(childCtx, c)
@@ -196,6 +221,13 @@ func (d *Daemon) Stop() {
 
 	if fn != nil {
 		fn()
+	}
+}
+
+// publishEvent emits an event if the event bus is configured.
+func (d *Daemon) publishEvent(e event.Event) {
+	if d.eventBus != nil {
+		d.eventBus.Publish(e)
 	}
 }
 
@@ -241,6 +273,10 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleDetach(c, frame)
 	case protocol.MsgShutdown:
 		d.handleShutdown(c)
+	case protocol.MsgEvent:
+		d.handleSubscribe(c, frame)
+	case protocol.MsgStatus:
+		d.handleStatus(c)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -268,6 +304,12 @@ func (d *Daemon) handleCreate(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	_ = c.Control().WriteFrame(okFrame(sessionInfoToResponse(info)))
+
+	d.publishEvent(event.Event{
+		Type:      event.SessionCreated,
+		SessionID: req.ID,
+		Payload:   map[string]any{"shell": req.Shell, "pid": info.Pid},
+	})
 }
 
 // handleList processes a MsgList frame.
@@ -370,6 +412,12 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	d.mu.Unlock()
 
 	_ = c.Control().WriteFrame(okFrame(nil))
+
+	d.publishEvent(event.Event{
+		Type:      event.SessionAttached,
+		SessionID: req.SessionID,
+		Payload:   map[string]any{"client_id": c.ClientID()},
+	})
 }
 
 // handleDetach removes the attachment of a client from a session and transitions
@@ -395,6 +443,11 @@ func (d *Daemon) handleDetach(c ConnectedClient, frame protocol.Frame) {
 
 	if shouldDetach {
 		_ = d.sessionSvc.Detach(req.SessionID)
+		d.publishEvent(event.Event{
+			Type:      event.SessionDetached,
+			SessionID: req.SessionID,
+			Payload:   nil,
+		})
 	}
 
 	_ = c.Control().WriteFrame(okFrame(nil))
@@ -436,6 +489,11 @@ func (d *Daemon) detachClient(clientID string) {
 
 	if shouldDetach {
 		_ = d.sessionSvc.Detach(sessID)
+		d.publishEvent(event.Event{
+			Type:      event.SessionDetached,
+			SessionID: sessID,
+			Payload:   nil,
+		})
 	}
 }
 
@@ -488,6 +546,69 @@ func (d *Daemon) flushOutput() {
 			_ = d.server.BroadcastTo(clientID, frame)
 		}
 	}
+}
+
+// handleStatus processes a MsgStatus frame and returns daemon health info.
+func (d *Daemon) handleStatus(c ConnectedClient) {
+	d.mu.RLock()
+	startedAt := d.startedAt
+	clientCount := len(d.clientSession)
+	d.mu.RUnlock()
+
+	sessions := d.sessionSvc.List()
+
+	resp := StatusResponse{
+		Version:      d.version,
+		Uptime:       time.Since(startedAt).Truncate(time.Second).String(),
+		SessionCount: len(sessions),
+		ClientCount:  clientCount,
+	}
+
+	_ = c.Control().WriteFrame(okFrame(resp))
+}
+
+// handleSubscribe processes a MsgEvent frame to subscribe clients to events.
+func (d *Daemon) handleSubscribe(c ConnectedClient, frame protocol.Frame) {
+	if d.eventBus == nil {
+		_ = c.Control().WriteFrame(errorFrame("events not enabled"))
+		return
+	}
+
+	var req EventSubscribeRequest
+	if len(frame.Payload) > 0 {
+		if err := json.Unmarshal(frame.Payload, &req); err != nil {
+			_ = c.Control().WriteFrame(errorFrame("invalid event subscribe request"))
+			return
+		}
+	}
+
+	sub := d.eventBus.Subscribe()
+
+	_ = c.Control().WriteFrame(okFrame(nil))
+
+	// Forward events to client's control channel in a goroutine.
+	go func() {
+		defer sub.Unsubscribe()
+		for evt := range sub.Events() {
+			if req.SessionID != "" && evt.SessionID != req.SessionID {
+				continue
+			}
+
+			data, err := json.Marshal(evt)
+			if err != nil {
+				continue
+			}
+
+			err = c.Control().WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgEvent,
+				Payload: data,
+			})
+			if err != nil {
+				return // client disconnected
+			}
+		}
+	}()
 }
 
 // okFrame builds a MsgOK frame with an optional JSON payload.

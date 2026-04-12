@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/wblech/wmux/internal/platform/auth"
+	"github.com/wblech/wmux/internal/platform/event"
 	"github.com/wblech/wmux/internal/platform/ipc"
 	"github.com/wblech/wmux/internal/platform/protocol"
 	"github.com/wblech/wmux/internal/platform/pty"
@@ -980,4 +982,141 @@ func TestDaemon_AttachDetachUpdatesSessionState(t *testing.T) {
 	sess, err = sessSvc.Get("state-1")
 	require.NoError(t, err)
 	assert.Equal(t, session.StateDetached, sess.State)
+}
+
+// testEventBus is a simple event recorder for tests.
+type testEventBus struct {
+	mu     sync.Mutex
+	events []event.Event
+	bus    *event.Bus
+}
+
+func newTestEventBus() *testEventBus {
+	return &testEventBus{
+		mu:     sync.Mutex{},
+		events: nil,
+		bus:    event.NewBus(),
+	}
+}
+
+func (b *testEventBus) Publish(e event.Event) {
+	b.mu.Lock()
+	b.events = append(b.events, e)
+	b.mu.Unlock()
+	b.bus.Publish(e)
+}
+
+func (b *testEventBus) Subscribe() *event.Subscription {
+	return b.bus.Subscribe()
+}
+
+func (b *testEventBus) Events() []event.Event {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]event.Event, len(b.events))
+	copy(out, b.events)
+	return out
+}
+
+func TestDaemon_EmitsSessionCreatedEvent(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	eb := newTestEventBus()
+	d, token, sock := testDaemon(t, WithEventBus(eb))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "evt-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	time.Sleep(50 * time.Millisecond)
+
+	events := eb.Events()
+	require.NotEmpty(t, events)
+	assert.Equal(t, event.SessionCreated, events[0].Type)
+	assert.Equal(t, "evt-sess", events[0].SessionID)
+}
+
+func TestDaemon_EmitsAttachDetachEvents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	eb := newTestEventBus()
+	d, token, sock := testDaemon(t, WithEventBus(eb))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "ad-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+
+	sendControl(t, ctrl, protocol.MsgAttach, SessionIDRequest{SessionID: "ad-sess"})
+	sendControl(t, ctrl, protocol.MsgDetach, SessionIDRequest{SessionID: "ad-sess"})
+
+	time.Sleep(50 * time.Millisecond)
+
+	events := eb.Events()
+	types := make([]event.EventType, 0, len(events))
+	for _, e := range events {
+		types = append(types, e.Type)
+	}
+
+	assert.Contains(t, types, event.SessionCreated)
+	assert.Contains(t, types, event.SessionAttached)
+	assert.Contains(t, types, event.SessionDetached)
+}
+
+func TestDaemon_Status(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t, WithVersion("0.1.0"))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "status-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+
+	resp := sendControl(t, ctrl, protocol.MsgStatus, nil)
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	var sr StatusResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &sr))
+	assert.Equal(t, "0.1.0", sr.Version)
+	assert.Equal(t, 1, sr.SessionCount)
+	assert.NotEmpty(t, sr.Uptime)
 }

@@ -23,3 +23,10 @@ func WithDataDir(dir string) Option {
 		d.dataDir = dir
 	}
 }
+
+// WithEventBus sets the event bus used by the daemon to emit lifecycle events.
+func WithEventBus(bus EventBus) Option {
+	return func(d *Daemon) {
+		d.eventBus = bus
+	}
+}

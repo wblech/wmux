@@ -52,6 +52,20 @@ type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
+// StatusResponse is the JSON payload for MsgStatus responses.
+type StatusResponse struct {
+	Version      string `json:"version"`
+	Uptime       string `json:"uptime"`
+	SessionCount int    `json:"session_count"`
+	ClientCount  int    `json:"client_count"`
+}
+
+// EventSubscribeRequest is the JSON payload for MsgEvent subscription.
+type EventSubscribeRequest struct {
+	// SessionID filters events to a specific session. Empty means all sessions.
+	SessionID string `json:"session_id,omitempty"`
+}
+
 // Sentinel errors for daemon operations.
 var (
 	// ErrDaemonRunning is returned when trying to start a daemon that is already running.
