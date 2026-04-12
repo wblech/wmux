@@ -2,7 +2,9 @@
 # Documentation: https://github.com/wlech/goframe
 
 allow:
+  - "internal/daemon/autodaemon.go"
   - "internal/daemon/pidfile.go"
+  - "internal/daemon/shutdown.go"
   - "internal/session/emulator.go"
   - "internal/session/backpressure.go"
   - "internal/session/batcher.go"
