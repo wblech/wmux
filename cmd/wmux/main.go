@@ -17,23 +17,26 @@ import (
 	"github.com/wblech/wmux/internal/transport"
 )
 
-const (
-	defaultSocketPath = "~/.wmux/daemon.sock"
-	defaultTokenPath  = "~/.wmux/daemon.token"
-	connectTimeout    = 5 * time.Second
+const connectTimeout = 5 * time.Second
+
+// Global paths set by parseGlobalFlags before subcommand dispatch.
+var (
+	socketPath = "~/.wmux/daemon.sock"
+	tokenPath  = "~/.wmux/daemon.token"
 )
 
 func main() {
-	if len(os.Args) < 2 {
+	cmd, args := parseGlobalFlags(os.Args[1:])
+
+	if cmd == "" {
 		printUsage()
 		os.Exit(1)
 	}
 
-	cmd := os.Args[1]
-	args := os.Args[2:]
-
 	var exitCode int
 	switch cmd {
+	case "daemon":
+		exitCode = cmdDaemon(args)
 	case "create":
 		exitCode = cmdCreate(args)
 	case "attach":
@@ -58,10 +61,49 @@ func main() {
 	os.Exit(exitCode)
 }
 
+// parseGlobalFlags extracts --socket and --token from args before the subcommand.
+// Returns the subcommand name and remaining args.
+func parseGlobalFlags(args []string) (string, []string) {
+	customSocket := false
+
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--socket":
+			if i+1 < len(args) {
+				socketPath = args[i+1]
+				customSocket = true
+				i += 2
+				continue
+			}
+		case "--token":
+			if i+1 < len(args) {
+				tokenPath = args[i+1]
+				i += 2
+				continue
+			}
+		}
+		break
+	}
+
+	// Derive token path from socket path if only --socket was given.
+	if customSocket && tokenPath == "~/.wmux/daemon.token" {
+		socketBase := strings.TrimSuffix(socketPath, ".sock")
+		tokenPath = socketBase + ".token"
+	}
+
+	if i >= len(args) {
+		return "", nil
+	}
+
+	return args[i], args[i+1:]
+}
+
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: wmux <command> [args]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Commands:")
+	fmt.Fprintln(os.Stderr, "  daemon    Start the daemon in foreground")
 	fmt.Fprintln(os.Stderr, "  create    Create a new session")
 	fmt.Fprintln(os.Stderr, "  attach    Attach to an existing session")
 	fmt.Fprintln(os.Stderr, "  detach    Detach from a session")
@@ -70,6 +112,10 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  info      Show session information")
 	fmt.Fprintln(os.Stderr, "  status    Show daemon status")
 	fmt.Fprintln(os.Stderr, "  events    Stream session events")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Global flags:")
+	fmt.Fprintln(os.Stderr, "  --socket <path>  Daemon socket path (default: ~/.wmux/daemon.sock)")
+	fmt.Fprintln(os.Stderr, "  --token <path>   Auth token path (default: ~/.wmux/daemon.token)")
 }
 
 // expandHome replaces a leading ~ with the user's home directory.
@@ -241,7 +287,7 @@ func cmdCreate(args []string) int {
 		}
 	}
 
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -296,14 +342,14 @@ func cmdAttach(args []string) int {
 
 	sessionID := args[0]
 
-	ctrl, clientID, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	ctrl, clientID, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
 	defer func() { _ = ctrl.Close() }()
 
-	stream, err := dialStream(defaultSocketPath, defaultTokenPath, clientID)
+	stream, err := dialStream(socketPath, tokenPath, clientID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -378,7 +424,7 @@ func cmdDetach(args []string) int {
 		return 1
 	}
 
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -409,7 +455,7 @@ func cmdKill(args []string) int {
 		return 1
 	}
 
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -435,7 +481,7 @@ func cmdKill(args []string) int {
 }
 
 func cmdList(_ []string) int {
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -485,7 +531,7 @@ func cmdInfo(args []string) int {
 		return 1
 	}
 
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -529,7 +575,7 @@ func cmdInfo(args []string) int {
 }
 
 func cmdStatus(_ []string) int {
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -573,7 +619,7 @@ func cmdEvents(args []string) int {
 		}
 	}
 
-	conn, _, err := dialDaemon(defaultSocketPath, defaultTokenPath)
+	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
