@@ -108,6 +108,11 @@ func TestWriter_WriteAfterClose(t *testing.T) {
 	assert.ErrorIs(t, err, ErrWriterClosed)
 }
 
+func TestWriter_NewWriterInvalidPath(t *testing.T) {
+	_, err := NewWriter("/nonexistent/dir/scrollback.bin", 0)
+	assert.Error(t, err)
+}
+
 func TestWriter_DoubleClose(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "scrollback.bin")
 

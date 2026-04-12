@@ -224,6 +224,37 @@ func TestEnsureSessionDir_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestDirSize_InvalidPath(t *testing.T) {
+	_, err := DirSize("/nonexistent/path")
+	assert.Error(t, err)
+}
+
+func TestDirSize_WithSubdirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "subdir"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.bin"), make([]byte, 100), 0644))
+
+	size, err := DirSize(dir)
+	require.NoError(t, err)
+	assert.Equal(t, int64(100), size) // subdir not counted
+}
+
+func TestTotalSize_InvalidPath(t *testing.T) {
+	_, err := TotalSize("/nonexistent/path")
+	assert.Error(t, err)
+}
+
+func TestListSessionDirs_InvalidPath(t *testing.T) {
+	_, err := ListSessionDirs("/nonexistent/path")
+	assert.Error(t, err)
+}
+
+func TestEvictLRU_InvalidPath(t *testing.T) {
+	err := EvictLRU("/nonexistent/path", 100)
+	assert.Error(t, err)
+}
+
 func TestDirSize_Empty(t *testing.T) {
 	dir := t.TempDir()
 
