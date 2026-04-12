@@ -244,3 +244,116 @@ func TestService_MaxSessions(t *testing.T) {
 	_, err = svc.Create("max-2", defaultCreateOpts())
 	assert.ErrorIs(t, err, ErrMaxSessions)
 }
+
+func TestService_CreateDefaultDimensions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	opts := CreateOptions{
+		Shell:         defaultShell(),
+		Args:          nil,
+		Cols:          0, // should default to 80
+		Rows:          0, // should default to 24
+		HighWatermark: 0, // should default to defaultHighWatermark
+		LowWatermark:  0, // should default to defaultLowWatermark
+		BatchInterval: 0, // should default to defaultBatchInterval
+	}
+
+	sess, err := svc.Create("default-dims", opts)
+	require.NoError(t, err)
+	assert.Equal(t, 80, sess.Cols)
+	assert.Equal(t, 24, sess.Rows)
+}
+
+func TestService_ResizeNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	err := svc.Resize("no-such-session", 120, 40)
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_WriteInputNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	err := svc.WriteInput("no-such-session", []byte("hello"))
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_SnapshotNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	_, err := svc.Snapshot("no-such-session")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_ReadOutput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	_, err := svc.Create("read-out", defaultCreateOpts())
+	require.NoError(t, err)
+
+	// ReadOutput on a live session should succeed (may return nil if no output yet).
+	out, err := svc.ReadOutput("read-out")
+	require.NoError(t, err)
+	// out may be nil or non-nil depending on timing; just verify no error.
+	_ = out
+}
+
+func TestService_ReadOutputNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	_, err := svc.ReadOutput("no-such-session")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_ReadOutputAfterWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+
+	_, err := svc.Create("read-after-write", defaultCreateOpts())
+	require.NoError(t, err)
+
+	// Write something to the PTY so the read loop produces output.
+	err = svc.WriteInput("read-after-write", []byte("echo hello\n"))
+	require.NoError(t, err)
+
+	// Poll until we get output or time out.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	var output []byte
+	for time.Now().Before(deadline) {
+		output, err = svc.ReadOutput("read-after-write")
+		require.NoError(t, err)
+		if len(output) > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	assert.NotEmpty(t, output)
+}
