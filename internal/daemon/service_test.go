@@ -137,6 +137,22 @@ func (a *testSessionAdapter) ReadOutput(id string) ([]byte, error) {
 	return a.svc.ReadOutput(id) //nolint:wrapcheck
 }
 
+func (a *testSessionAdapter) Attach(id string) error {
+	return a.svc.Attach(id) //nolint:wrapcheck
+}
+
+func (a *testSessionAdapter) Detach(id string) error {
+	return a.svc.Detach(id) //nolint:wrapcheck
+}
+
+func (a *testSessionAdapter) LastActivity(id string) (time.Time, error) {
+	return a.svc.LastActivity(id) //nolint:wrapcheck
+}
+
+func (a *testSessionAdapter) OnExit(fn func(id string, exitCode int)) {
+	a.svc.OnExit(fn)
+}
+
 // --- test helpers ---
 
 // testDaemon creates a Daemon with a temp Unix socket. It returns the daemon,
@@ -899,4 +915,69 @@ func TestDaemon_UnknownMessage(t *testing.T) {
 	resp, err := ctrl.ReadFrame()
 	require.NoError(t, err)
 	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+// TestDaemon_AttachDetachUpdatesSessionState verifies that attach/detach
+// messages transition the underlying session state correctly.
+func TestDaemon_AttachDetachUpdatesSessionState(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	// Build daemon with direct access to the underlying session service.
+	dir, err := os.MkdirTemp("", "wmux-daemon-ad")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	sock := filepath.Join(dir, "d.sock")
+	ln, err := ipc.Listen(sock)
+	require.NoError(t, err)
+
+	token, err := auth.Generate()
+	require.NoError(t, err)
+
+	srv := transport.NewServer(ln, token)
+	spawner := &pty.UnixSpawner{}
+	sessSvc := session.NewService(spawner)
+	d := NewDaemon(&testServerAdapter{srv: srv}, &testSessionAdapter{svc: sessSvc})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(20 * time.Millisecond)
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create session.
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "state-1",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Session starts alive.
+	sess, err := sessSvc.Get("state-1")
+	require.NoError(t, err)
+	assert.Equal(t, session.StateAlive, sess.State)
+
+	// Attach transitions session to alive (from alive it stays alive).
+	attachResp := sendControl(t, ctrl, protocol.MsgAttach, SessionIDRequest{SessionID: "state-1"})
+	require.Equal(t, protocol.MsgOK, attachResp.Type)
+
+	// Detach — last client leaves, so session should be detached.
+	detachResp := sendControl(t, ctrl, protocol.MsgDetach, SessionIDRequest{SessionID: "state-1"})
+	require.Equal(t, protocol.MsgOK, detachResp.Type)
+
+	time.Sleep(50 * time.Millisecond)
+
+	sess, err = sessSvc.Get("state-1")
+	require.NoError(t, err)
+	assert.Equal(t, session.StateDetached, sess.State)
 }

@@ -72,6 +72,14 @@ type SessionManager interface {
 	WriteInput(id string, data []byte) error
 	// ReadOutput drains buffered output from the session.
 	ReadOutput(id string) ([]byte, error)
+	// Attach transitions the session to attached state.
+	Attach(id string) error
+	// Detach transitions the session to detached state.
+	Detach(id string) error
+	// LastActivity returns the time of last PTY output.
+	LastActivity(id string) (time.Time, error)
+	// OnExit registers a callback invoked when a session exits.
+	OnExit(fn func(id string, exitCode int))
 }
 
 // ControlConn abstracts a control-channel connection.
@@ -339,7 +347,8 @@ func (d *Daemon) handleInput(c ConnectedClient, frame protocol.Frame) {
 	_ = c.Control().WriteFrame(okFrame(nil))
 }
 
-// handleAttach records the attachment of a client to a session.
+// handleAttach records the attachment of a client to a session and transitions
+// the session to attached state.
 func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	var req SessionIDRequest
 	if err := json.Unmarshal(frame.Payload, &req); err != nil {
@@ -347,11 +356,15 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 		return
 	}
 
+	if err := d.sessionSvc.Attach(req.SessionID); err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
 	d.mu.Lock()
 	if _, ok := d.attachments[req.SessionID]; !ok {
 		d.attachments[req.SessionID] = make(map[string]struct{})
 	}
-
 	d.attachments[req.SessionID][c.ClientID()] = struct{}{}
 	d.clientSession[c.ClientID()] = req.SessionID
 	d.mu.Unlock()
@@ -359,7 +372,8 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	_ = c.Control().WriteFrame(okFrame(nil))
 }
 
-// handleDetach removes the attachment of a client from a session.
+// handleDetach removes the attachment of a client from a session and transitions
+// the session to detached state when the last client leaves.
 func (d *Daemon) handleDetach(c ConnectedClient, frame protocol.Frame) {
 	var req SessionIDRequest
 	if err := json.Unmarshal(frame.Payload, &req); err != nil {
@@ -368,16 +382,20 @@ func (d *Daemon) handleDetach(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	d.mu.Lock()
+	shouldDetach := false
 	if clients, ok := d.attachments[req.SessionID]; ok {
 		delete(clients, c.ClientID())
-
 		if len(clients) == 0 {
 			delete(d.attachments, req.SessionID)
+			shouldDetach = true
 		}
 	}
-
 	delete(d.clientSession, c.ClientID())
 	d.mu.Unlock()
+
+	if shouldDetach {
+		_ = d.sessionSvc.Detach(req.SessionID)
+	}
 
 	_ = c.Control().WriteFrame(okFrame(nil))
 }
@@ -392,24 +410,32 @@ func (d *Daemon) handleShutdown(c ConnectedClient) {
 	}()
 }
 
-// detachClient removes all attachment state for the disconnected client.
+// detachClient removes all attachment state for the disconnected client and
+// transitions the session to detached state when this was the last client.
 func (d *Daemon) detachClient(clientID string) {
 	d.mu.Lock()
-	defer d.mu.Unlock()
 
 	sessID, ok := d.clientSession[clientID]
 	if !ok {
+		d.mu.Unlock()
 		return
 	}
 
 	delete(d.clientSession, clientID)
 
+	shouldDetach := false
 	if clients, ok := d.attachments[sessID]; ok {
 		delete(clients, clientID)
-
 		if len(clients) == 0 {
 			delete(d.attachments, sessID)
+			shouldDetach = true
 		}
+	}
+
+	d.mu.Unlock()
+
+	if shouldDetach {
+		_ = d.sessionSvc.Detach(sessID)
 	}
 }
 
