@@ -1,3 +1,4 @@
+// Package config provides TOML-based configuration loading and file watching for wmux.
 package config
 
 import (
@@ -146,7 +147,7 @@ func Load(path string) (*Config, error) {
 	}
 
 	cfg := defaults()
-	if err := k.UnmarshalWithConf("", cfg, koanf.UnmarshalConf{Tag: "koanf"}); err != nil {
+	if err := k.UnmarshalWithConf("", cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: false, DecoderConfig: nil}); err != nil {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}
 
@@ -203,13 +204,13 @@ func Watch(path string, onChange func(*Config)) (stop func(), err error) {
 func fileHash(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("config: open %q: %w", path, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return "", err
+		return "", fmt.Errorf("config: hash %q: %w", path, err)
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil)), nil

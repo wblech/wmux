@@ -51,7 +51,7 @@ func TestLoad_DefaultValues(t *testing.T) {
 	assert.Equal(t, []string{"SSH_AUTH_SOCK", "SSH_CONNECTION", "DISPLAY"}, cfg.Environment.Update)
 
 	// shell
-	assert.Equal(t, "", cfg.Shell.Default)
+	assert.Empty(t, cfg.Shell.Default)
 	assert.False(t, cfg.Shell.UseWrapper)
 
 	// watchdog

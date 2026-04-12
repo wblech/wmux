@@ -257,6 +257,8 @@ func TestService_CreateDefaultDimensions(t *testing.T) {
 		Args:          nil,
 		Cols:          0, // should default to 80
 		Rows:          0, // should default to 24
+		Cwd:           "",
+		Env:           nil,
 		HighWatermark: 0, // should default to defaultHighWatermark
 		LowWatermark:  0, // should default to defaultLowWatermark
 		BatchInterval: 0, // should default to defaultBatchInterval
