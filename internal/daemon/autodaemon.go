@@ -39,11 +39,15 @@ func BuildDaemonArgs(socketPath, pidFilePath, logLevel string) []string {
 	}
 }
 
+// executableFunc is the function used to find the current executable path.
+// Overridable in tests.
+var executableFunc = os.Executable
+
 // Autodaemonize spawns the current binary as a background daemon process.
 // It returns once the daemon is started and the socket appears, or an error
 // if it fails to start within timeout.
 func Autodaemonize(socketPath, pidFilePath, logLevel string, timeout time.Duration) error {
-	executable, err := os.Executable()
+	executable, err := executableFunc()
 	if err != nil {
 		return fmt.Errorf("daemon: find executable: %w", err)
 	}

@@ -43,6 +43,40 @@ func TestWaitForSocket_AppearsAfterDelay(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestAutodaemonize_ExecutableError(t *testing.T) {
+	orig := executableFunc
+	executableFunc = func() (string, error) {
+		return "", os.ErrNotExist
+	}
+	t.Cleanup(func() { executableFunc = orig })
+
+	err := Autodaemonize("/tmp/s.sock", "/tmp/d.pid", "info", 100*time.Millisecond)
+	assert.Error(t, err)
+}
+
+func TestAutodaemonize_StartError(t *testing.T) {
+	orig := executableFunc
+	executableFunc = func() (string, error) {
+		return "/nonexistent/binary", nil
+	}
+	t.Cleanup(func() { executableFunc = orig })
+
+	err := Autodaemonize("/tmp/s.sock", "/tmp/d.pid", "info", 100*time.Millisecond)
+	assert.Error(t, err)
+}
+
+func TestAutodaemonize_SocketTimeout(t *testing.T) {
+	// Use "true" as the executable — it exits immediately, socket never appears.
+	orig := executableFunc
+	executableFunc = func() (string, error) {
+		return "/usr/bin/true", nil
+	}
+	t.Cleanup(func() { executableFunc = orig })
+
+	err := Autodaemonize(filepath.Join(t.TempDir(), "never.sock"), "/tmp/d.pid", "info", 150*time.Millisecond)
+	assert.Error(t, err)
+}
+
 func TestBuildDaemonArgs(t *testing.T) {
 	args := BuildDaemonArgs("/path/to/sock", "/path/to/pid", "info")
 	assert.Contains(t, args, "daemon")
