@@ -3,6 +3,7 @@ module github.com/wblech/wmux
 go 1.26.1
 
 require (
+	github.com/creack/pty v1.1.24
 	github.com/knadh/koanf/parsers/toml v0.1.0
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.4
