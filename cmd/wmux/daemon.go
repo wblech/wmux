@@ -10,6 +10,7 @@ import (
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/config"
 	"github.com/wblech/wmux/internal/platform/event"
+	"github.com/wblech/wmux/internal/platform/history"
 	"github.com/wblech/wmux/internal/platform/ipc"
 	"github.com/wblech/wmux/internal/platform/pty"
 	"github.com/wblech/wmux/internal/session"
@@ -89,6 +90,12 @@ func cmdDaemon(args []string) int {
 		return 1
 	}
 
+	maxScrollback, err := history.ParseSize(cfg.History.MaxPerSession)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: parse max_per_session: %v\n", err)
+		return 1
+	}
+
 	// Wire dependencies.
 	server := transport.NewServer(listener, token)
 	spawner := &pty.UnixSpawner{}
@@ -104,6 +111,7 @@ func cmdDaemon(args []string) int {
 		daemon.WithVersion("0.1.0"),
 		daemon.WithEventBus(eventBus),
 		daemon.WithColdRestore(cfg.History.ColdRestore),
+		daemon.WithMaxScrollbackSize(maxScrollback),
 	)
 
 	fmt.Fprintf(os.Stderr, "wmux daemon listening on %s\n", expandedSocket)

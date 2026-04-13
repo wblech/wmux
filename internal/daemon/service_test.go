@@ -1629,3 +1629,43 @@ func TestDaemon_ColdRestore_Enabled_ScrollbackPersisted(t *testing.T) {
 		return err == nil && info.Size() > 0
 	}, 3*time.Second, 50*time.Millisecond, "scrollback.bin should have data")
 }
+
+func TestDaemon_ColdRestore_MaxScrollbackSize(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dataDir := t.TempDir()
+	eb := event.NewBus()
+	defer eb.Close()
+
+	d, token, sock := testDaemon(t,
+		WithDataDir(dataDir),
+		WithColdRestore(true),
+		WithMaxScrollbackSize(1024),
+		WithEventBus(eb),
+	)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "scroll-test",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Verify the scrollback writer was created.
+	sessionDir := filepath.Join(dataDir, "scroll-test")
+	scrollbackPath := filepath.Join(sessionDir, "scrollback.bin")
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(scrollbackPath)
+		return err == nil
+	}, 2*time.Second, 50*time.Millisecond)
+}

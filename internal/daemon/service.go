@@ -142,6 +142,7 @@ type Daemon struct {
 	eventBus          EventBus                       // may be nil
 	startedAt         time.Time
 	coldRestore       bool
+	maxScrollbackSize int64
 	scrollbackWriters map[string]*history.Writer // session_id -> writer (cold restore only)
 }
 
@@ -162,6 +163,7 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		eventBus:          nil,
 		startedAt:         time.Time{},
 		coldRestore:       false,
+		maxScrollbackSize: 0,
 		scrollbackWriters: make(map[string]*history.Writer),
 	}
 
@@ -783,7 +785,7 @@ func (d *Daemon) persistSessionCreate(sessionID string, req CreateRequest) {
 		return
 	}
 
-	w, err := history.NewWriter(filepath.Join(sessionDir, "scrollback.bin"), 0)
+	w, err := history.NewWriter(filepath.Join(sessionDir, "scrollback.bin"), d.maxScrollbackSize)
 	if err != nil {
 		return
 	}

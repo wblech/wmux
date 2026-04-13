@@ -39,3 +39,11 @@ func WithColdRestore(enabled bool) Option {
 		d.coldRestore = enabled
 	}
 }
+
+// WithMaxScrollbackSize sets the maximum scrollback file size in bytes for cold restore.
+// A value of 0 means unlimited.
+func WithMaxScrollbackSize(n int64) Option {
+	return func(d *Daemon) {
+		d.maxScrollbackSize = n
+	}
+}
