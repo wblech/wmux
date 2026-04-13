@@ -14,6 +14,12 @@ import (
 	"github.com/wblech/wmux/internal/platform/protocol"
 )
 
+// logErr logs a non-fatal error to stderr. Intended for best-effort operations
+// where the error should be observable but does not affect the response.
+func logErr(context string, err error) {
+	fmt.Fprintf(os.Stderr, "wmux: %s: %v\n", context, err)
+}
+
 const (
 	// broadcastInterval is how often the output broadcaster polls sessions.
 	broadcastInterval = 16 * time.Millisecond
@@ -746,13 +752,17 @@ func (d *Daemon) handleEnvForward(c ConnectedClient, frame protocol.Frame) {
 	nonPathEnv := make(map[string]string)
 	for k, v := range req.Env {
 		if _, err := os.Stat(v); err == nil {
-			_ = ForwardEnv(sessionDir, k, v)
+			if err := ForwardEnv(sessionDir, k, v); err != nil {
+				logErr("env forward symlink", err)
+			}
 		} else {
 			nonPathEnv[k] = v
 		}
 	}
 	if len(nonPathEnv) > 0 {
-		_ = WriteEnvFile(sessionDir, nonPathEnv)
+		if err := WriteEnvFile(sessionDir, nonPathEnv); err != nil {
+			logErr("env forward write", err)
+		}
 	}
 
 	_ = c.Control().WriteFrame(okFrame(nil))
