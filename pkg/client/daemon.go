@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/auth"
@@ -27,6 +28,13 @@ type Daemon struct {
 func NewDaemon(opts ...Option) (*Daemon, error) {
 	cfg := newConfig(opts...)
 	resolveConfig(cfg)
+
+	switch cfg.emulatorBackend {
+	case "none", "xterm":
+		// valid
+	default:
+		return nil, fmt.Errorf("client: unknown emulator backend %q (valid: none, xterm)", cfg.emulatorBackend)
+	}
 
 	nsDir := filepath.Dir(cfg.socket)
 	if err := os.MkdirAll(nsDir, 0o700); err != nil {
@@ -101,30 +109,31 @@ func isDaemonMode(args []string) bool {
 // Integrators add this as the first line in main():
 //
 //	func main() {
-//	    if client.ServeDaemon(os.Args) {
+//	    if handled, err := client.ServeDaemon(os.Args); handled {
+//	        if err != nil {
+//	            log.Fatal(err)
+//	        }
 //	        return
 //	    }
 //	    // normal app...
 //	}
-func ServeDaemon(args []string) bool {
+func ServeDaemon(args []string) (bool, error) {
 	if !isDaemonMode(args) {
-		return false
+		return false, nil
 	}
 
 	opts := parseDaemonArgs(args)
 	d, err := NewDaemon(opts...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "wmux daemon: %v\n", err)
-		os.Exit(1)
+		return true, fmt.Errorf("wmux daemon: %w", err)
 	}
 
 	ctx := daemon.HandleSignals(context.Background())
 	if err := d.Serve(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "wmux daemon: %v\n", err)
-		os.Exit(1)
+		return true, fmt.Errorf("wmux daemon: %w", err)
 	}
 
-	return true
+	return true, nil
 }
 
 // parseDaemonArgs extracts options from the sentinel-style args.
@@ -147,9 +156,29 @@ func parseDaemonArgs(args []string) []Option {
 				opts = append(opts, WithSocket(args[i+1]))
 				i++
 			}
+		case "--token-path":
+			if i+1 < len(args) {
+				opts = append(opts, WithTokenPath(args[i+1]))
+				i++
+			}
 		case "--data-dir":
 			if i+1 < len(args) {
 				opts = append(opts, WithDataDir(args[i+1]))
+				i++
+			}
+		case "--cold-restore":
+			opts = append(opts, WithColdRestore(true))
+		case "--max-scrollback":
+			if i+1 < len(args) {
+				n, err := strconv.ParseInt(args[i+1], 10, 64)
+				if err == nil {
+					opts = append(opts, WithMaxScrollbackSize(n))
+				}
+				i++
+			}
+		case "--emulator-backend":
+			if i+1 < len(args) {
+				opts = append(opts, WithEmulatorBackend(args[i+1]))
 				i++
 			}
 		}

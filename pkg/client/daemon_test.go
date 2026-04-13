@@ -71,8 +71,9 @@ func TestNewDaemon_ServeAndConnect(t *testing.T) {
 }
 
 func TestServeDaemon_NotDaemonMode(t *testing.T) {
-	handled := ServeDaemon([]string{"watchtower", "--some-flag"})
+	handled, err := ServeDaemon([]string{"watchtower", "--some-flag"})
 	assert.False(t, handled)
+	assert.NoError(t, err)
 }
 
 func TestIsDaemonMode(t *testing.T) {
@@ -82,12 +83,36 @@ func TestIsDaemonMode(t *testing.T) {
 }
 
 func TestParseDaemonArgs(t *testing.T) {
-	args := []string{"watchtower", "__wmux_daemon__", "--base-dir", "/tmp/test", "--namespace", "myapp", "--socket", "/tmp/s.sock", "--data-dir", "/tmp/data"}
+	args := []string{"watchtower", "__wmux_daemon__",
+		"--base-dir", "/tmp/test",
+		"--namespace", "myapp",
+		"--socket", "/tmp/s.sock",
+		"--token-path", "/tmp/t.token",
+		"--data-dir", "/tmp/data",
+		"--cold-restore",
+		"--max-scrollback", "1048576",
+		"--emulator-backend", "xterm",
+	}
 	opts := parseDaemonArgs(args)
 
 	cfg := newConfig(opts...)
 	assert.Equal(t, "/tmp/test", cfg.baseDir)
 	assert.Equal(t, "myapp", cfg.namespace)
 	assert.Equal(t, "/tmp/s.sock", cfg.socket)
+	assert.Equal(t, "/tmp/t.token", cfg.tokenPath)
 	assert.Equal(t, "/tmp/data", cfg.dataDir)
+	assert.True(t, cfg.coldRestore)
+	assert.Equal(t, int64(1048576), cfg.maxScrollbackSize)
+	assert.Equal(t, "xterm", cfg.emulatorBackend)
+}
+
+func TestNewDaemon_InvalidBackend(t *testing.T) {
+	dir := shortTempDir(t)
+	_, err := NewDaemon(
+		WithBaseDir(dir),
+		WithNamespace("test"),
+		WithEmulatorBackend("invalid"),
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown emulator backend")
 }
