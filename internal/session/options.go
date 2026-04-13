@@ -24,3 +24,9 @@ func WithSpawnSemaphore(n int) Option {
 		}
 	}
 }
+
+// WithAddonManager sets the addon manager for creating addon-backed emulators.
+// When set, sessions use AddonEmulator instead of NoneEmulator.
+func WithAddonManager(mgr *AddonManager) Option {
+	return func(s *Service) { s.addonManager = mgr }
+}

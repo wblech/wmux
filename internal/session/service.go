@@ -78,24 +78,26 @@ type managedSession struct {
 
 // Service manages the lifecycle of terminal sessions.
 type Service struct {
-	mu          sync.RWMutex
-	sessions    map[string]*managedSession
-	spawner     pty.Spawner
-	maxSessions int
-	onExit      func(id string, exitCode int)
-	spawnSem    chan struct{}
+	mu             sync.RWMutex
+	sessions       map[string]*managedSession
+	spawner        pty.Spawner
+	maxSessions    int
+	onExit         func(id string, exitCode int)
+	spawnSem       chan struct{}
+	addonManager   *AddonManager
 }
 
 // NewService creates a new Service backed by the given Spawner.
 // Options are applied in order after the defaults are set.
 func NewService(spawner pty.Spawner, opts ...Option) *Service {
 	s := &Service{
-		mu:          sync.RWMutex{},
-		sessions:    make(map[string]*managedSession),
-		spawner:     spawner,
-		maxSessions: 0,
-		onExit:      nil,
-		spawnSem:    nil,
+		mu:           sync.RWMutex{},
+		sessions:     make(map[string]*managedSession),
+		spawner:      spawner,
+		maxSessions:  0,
+		onExit:       nil,
+		spawnSem:     nil,
+		addonManager: nil,
 	}
 
 	for _, o := range opts {
@@ -185,10 +187,17 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 		EndedAt:   time.Time{},
 	}
 
+	var emulator ScreenEmulator
+	if s.addonManager != nil {
+		emulator = s.addonManager.EmulatorFor(id, cols, rows)
+	} else {
+		emulator = NoneEmulator{}
+	}
+
 	ms := &managedSession{
 		session:       sess,
 		process:       proc,
-		emulator:      NoneEmulator{},
+		emulator:      emulator,
 		buffer:        buf,
 		batcher:       batcher,
 		historyWriter: opts.HistoryWriter,
