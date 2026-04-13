@@ -26,6 +26,7 @@ func TestMessageType_String(t *testing.T) {
 		{MsgError, "error"},
 		{MsgOK, "ok"},
 		{MsgShutdown, "shutdown"},
+		{MsgAuth, "auth"},
 	}
 
 	for _, tc := range cases {
@@ -41,6 +42,12 @@ func TestFrame_HeaderSize(t *testing.T) {
 
 func TestVersion(t *testing.T) {
 	assert.Equal(t, ProtocolVersion, byte(1))
+}
+
+func TestMessageType_String_Phase2(t *testing.T) {
+	assert.Equal(t, "meta_set", MsgMetaSet.String())
+	assert.Equal(t, "meta_get", MsgMetaGet.String())
+	assert.Equal(t, "env_forward", MsgEnvForward.String())
 }
 
 func TestMessageType_String_Unknown(t *testing.T) {

@@ -32,6 +32,9 @@ const (
 	MsgShutdown     MessageType = 0x0F
 	MsgAuth         MessageType = 0x10
 	MsgStatus       MessageType = 0x11
+	MsgMetaSet      MessageType = 0x12
+	MsgMetaGet      MessageType = 0x13
+	MsgEnvForward   MessageType = 0x14
 )
 
 // String returns the lowercase name of the message type.
@@ -71,6 +74,12 @@ func (m MessageType) String() string {
 		return "auth"
 	case MsgStatus:
 		return "status"
+	case MsgMetaSet:
+		return "meta_set"
+	case MsgMetaGet:
+		return "meta_get"
+	case MsgEnvForward:
+		return "env_forward"
 	default:
 		return "unknown"
 	}
