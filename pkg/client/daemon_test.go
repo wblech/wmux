@@ -168,6 +168,89 @@ func TestBuildDaemonArgs(t *testing.T) {
 	assert.Contains(t, args, "xterm")
 }
 
+func TestNewDaemon_SessionOperations(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := shortTempDir(t)
+	d, err := NewDaemon(WithBaseDir(dir), WithNamespace("ops"))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() { _ = d.Serve(ctx) }()
+
+	// Wait for daemon to be ready
+	var c *Client
+	require.Eventually(t, func() bool {
+		var connErr error
+		c, connErr = New(WithBaseDir(dir), WithNamespace("ops"), WithAutoStart(false))
+		return connErr == nil
+	}, 3*time.Second, 50*time.Millisecond)
+	defer c.Close() //nolint:errcheck
+
+	// Create a session
+	info, err := c.Create("test-sess", CreateParams{
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "test-sess", info.ID)
+	assert.Equal(t, "alive", info.State)
+
+	// List sessions
+	sessions, err := c.List()
+	require.NoError(t, err)
+	assert.Len(t, sessions, 1)
+
+	// Info
+	info, err = c.Info("test-sess")
+	require.NoError(t, err)
+	assert.Equal(t, "test-sess", info.ID)
+
+	// Resize
+	err = c.Resize("test-sess", 120, 40)
+	require.NoError(t, err)
+
+	// Write
+	err = c.Write("test-sess", []byte("echo hello\n"))
+	require.NoError(t, err)
+
+	// Attach
+	result, err := c.Attach("test-sess")
+	require.NoError(t, err)
+	assert.Equal(t, "test-sess", result.Session.ID)
+
+	// Detach
+	err = c.Detach("test-sess")
+	require.NoError(t, err)
+
+	// MetaSet + MetaGet
+	err = c.MetaSet("test-sess", "app", "test")
+	require.NoError(t, err)
+
+	val, err := c.MetaGet("test-sess", "app")
+	require.NoError(t, err)
+	assert.Equal(t, "test", val)
+
+	// MetaGetAll
+	meta, err := c.MetaGetAll("test-sess")
+	require.NoError(t, err)
+	assert.Equal(t, "test", meta["app"])
+
+	// Kill
+	err = c.Kill("test-sess")
+	require.NoError(t, err)
+
+	cancel()
+}
+
 func TestBuildDaemonArgs_Defaults(t *testing.T) {
 	cfg := &config{
 		namespace:         "default",

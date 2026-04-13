@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/protocol"
-	"github.com/wblech/wmux/internal/transport"
 )
 
 // shortTempDir creates a short temp directory to avoid Unix socket path limits.
@@ -51,23 +50,22 @@ func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()
 			_ = conn.Close()
 			return
 		}
-		// Payload format: [channelByte][token].
-		tokenBytes := frame.Payload
-		if len(frame.Payload) >= 1+auth.TokenSize && transport.ChannelType(frame.Payload[0]) == transport.ChannelControl {
-			tokenBytes = frame.Payload[1 : 1+auth.TokenSize]
-		}
-		if frame.Type == protocol.MsgAuth && auth.Verify(token, tokenBytes) {
-			_ = pConn.WriteFrame(protocol.Frame{
-				Version: protocol.ProtocolVersion,
-				Type:    protocol.MsgOK,
-				Payload: nil,
-			})
-		} else {
-			_ = pConn.WriteFrame(protocol.Frame{
-				Version: protocol.ProtocolVersion,
-				Type:    protocol.MsgError,
-				Payload: []byte(`{"error":"auth failed"}`),
-			})
+		// Expect [channelByte][token].
+		if frame.Type == protocol.MsgAuth && len(frame.Payload) == 1+auth.TokenSize {
+			receivedToken := frame.Payload[1:] // skip channel byte
+			if auth.Verify(token, receivedToken) {
+				_ = pConn.WriteFrame(protocol.Frame{
+					Version: protocol.ProtocolVersion,
+					Type:    protocol.MsgOK,
+					Payload: nil,
+				})
+			} else {
+				_ = pConn.WriteFrame(protocol.Frame{
+					Version: protocol.ProtocolVersion,
+					Type:    protocol.MsgError,
+					Payload: []byte(`{"error":"auth failed"}`),
+				})
+			}
 		}
 		<-done
 		_ = conn.Close()
@@ -164,17 +162,13 @@ func startMockServerWithHandlers(t *testing.T, handlers map[protocol.MessageType
 		}
 		pConn := protocol.NewConn(conn)
 
-		// Auth handshake. Payload format: [channelByte][token].
+		// Auth handshake. Expect [channelByte][token].
 		frame, err := pConn.ReadFrame()
 		if err != nil {
 			_ = conn.Close()
 			return
 		}
-		tokenBytes := frame.Payload
-		if len(frame.Payload) >= 1+auth.TokenSize && transport.ChannelType(frame.Payload[0]) == transport.ChannelControl {
-			tokenBytes = frame.Payload[1 : 1+auth.TokenSize]
-		}
-		if frame.Type != protocol.MsgAuth || !auth.Verify(token, tokenBytes) {
+		if frame.Type != protocol.MsgAuth || len(frame.Payload) != 1+auth.TokenSize || !auth.Verify(token, frame.Payload[1:]) {
 			_ = pConn.WriteFrame(errFrame("auth failed"))
 			_ = conn.Close()
 			return
@@ -512,12 +506,8 @@ func TestNew_AuthRejected(t *testing.T) {
 			_ = conn.Close()
 			return
 		}
-		// Payload format: [channelByte][token].
-		tokenBytes := frame.Payload
-		if len(frame.Payload) >= 1+auth.TokenSize && transport.ChannelType(frame.Payload[0]) == transport.ChannelControl {
-			tokenBytes = frame.Payload[1 : 1+auth.TokenSize]
-		}
-		if frame.Type == protocol.MsgAuth && auth.Verify(token, tokenBytes) {
+		// Expect [channelByte][token].
+		if frame.Type == protocol.MsgAuth && len(frame.Payload) == 1+auth.TokenSize && auth.Verify(token, frame.Payload[1:]) {
 			_ = pConn.WriteFrame(protocol.Frame{
 				Version: protocol.ProtocolVersion,
 				Type:    protocol.MsgOK,
