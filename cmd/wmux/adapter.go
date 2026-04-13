@@ -137,6 +137,14 @@ func (a *sessionAdapter) Detach(id string) error {
 	return nil
 }
 
+func (a *sessionAdapter) Snapshot(id string) (daemon.SnapshotData, error) {
+	snap, err := a.svc.Snapshot(id)
+	if err != nil {
+		return daemon.SnapshotData{}, fmt.Errorf("session adapter: snapshot: %w", err)
+	}
+	return daemon.SnapshotData{Scrollback: snap.Scrollback, Viewport: snap.Viewport}, nil
+}
+
 func (a *sessionAdapter) LastActivity(id string) (time.Time, error) {
 	t, err := a.svc.LastActivity(id)
 	if err != nil {

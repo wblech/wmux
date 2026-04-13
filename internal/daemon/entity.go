@@ -66,6 +66,29 @@ type EventSubscribeRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+// AttachResponse is the JSON payload for MsgAttach responses with snapshot.
+type AttachResponse struct {
+	ID       string            `json:"id"`
+	State    string            `json:"state"`
+	Pid      int               `json:"pid"`
+	Cols     int               `json:"cols"`
+	Rows     int               `json:"rows"`
+	Shell    string            `json:"shell"`
+	Snapshot *SnapshotResponse `json:"snapshot,omitempty"`
+}
+
+// SnapshotResponse carries the two-phase snapshot data.
+type SnapshotResponse struct {
+	Scrollback []byte `json:"scrollback"`
+	Viewport   []byte `json:"viewport"`
+}
+
+// SnapshotData holds raw terminal snapshot data returned by SessionManager.
+type SnapshotData struct {
+	Scrollback []byte
+	Viewport   []byte
+}
+
 // Sentinel errors for daemon operations.
 var (
 	// ErrDaemonRunning is returned when trying to start a daemon that is already running.

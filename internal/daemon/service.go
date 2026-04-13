@@ -87,6 +87,8 @@ type SessionManager interface {
 	Detach(id string) error
 	// LastActivity returns the time of last PTY output.
 	LastActivity(id string) (time.Time, error)
+	// Snapshot returns the current terminal screen state for the session.
+	Snapshot(id string) (SnapshotData, error)
 	// OnExit registers a callback invoked when a session exits.
 	OnExit(fn func(id string, exitCode int))
 }
@@ -402,6 +404,12 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 		return
 	}
 
+	info, err := d.sessionSvc.Get(req.SessionID)
+	if err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
 	if err := d.sessionSvc.Attach(req.SessionID); err != nil {
 		_ = c.Control().WriteFrame(errorFrame(err.Error()))
 		return
@@ -415,7 +423,24 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	d.clientSession[c.ClientID()] = req.SessionID
 	d.mu.Unlock()
 
-	_ = c.Control().WriteFrame(okFrame(nil))
+	resp := AttachResponse{
+		ID:    info.ID,
+		State: info.State,
+		Pid:   info.Pid,
+		Cols:  info.Cols,
+		Rows:  info.Rows,
+		Shell: info.Shell,
+	}
+
+	snap, snapErr := d.sessionSvc.Snapshot(req.SessionID)
+	if snapErr == nil && (len(snap.Scrollback) > 0 || len(snap.Viewport) > 0) {
+		resp.Snapshot = &SnapshotResponse{
+			Scrollback: snap.Scrollback,
+			Viewport:   snap.Viewport,
+		}
+	}
+
+	_ = c.Control().WriteFrame(okFrame(resp))
 
 	d.publishEvent(event.Event{
 		Type:      event.SessionAttached,

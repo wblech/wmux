@@ -147,6 +147,14 @@ func (a *testSessionAdapter) Detach(id string) error {
 	return a.svc.Detach(id) //nolint:wrapcheck
 }
 
+func (a *testSessionAdapter) Snapshot(id string) (SnapshotData, error) {
+	snap, err := a.svc.Snapshot(id)
+	if err != nil {
+		return SnapshotData{}, err //nolint:wrapcheck
+	}
+	return SnapshotData{Scrollback: snap.Scrollback, Viewport: snap.Viewport}, nil
+}
+
 func (a *testSessionAdapter) LastActivity(id string) (time.Time, error) {
 	return a.svc.LastActivity(id) //nolint:wrapcheck
 }
@@ -1206,4 +1214,39 @@ func TestDaemon_EventSubscribeInvalidPayload(t *testing.T) {
 	resp, err := ctrl.ReadFrame()
 	require.NoError(t, err)
 	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+// TestDaemon_AttachReturnsSessionInfo verifies that MsgAttach returns session
+// metadata in the AttachResponse payload.
+func TestDaemon_AttachReturnsSessionInfo(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "snap-sess",
+		Shell: "/bin/sh",
+		Cols:  80,
+		Rows:  24,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	attachResp := sendControl(t, ctrl, protocol.MsgAttach, SessionIDRequest{SessionID: "snap-sess"})
+	require.Equal(t, protocol.MsgOK, attachResp.Type)
+	require.NotNil(t, attachResp.Payload)
+
+	var attachData AttachResponse
+	err2 := json.Unmarshal(attachResp.Payload, &attachData)
+	require.NoError(t, err2)
+	assert.Equal(t, "snap-sess", attachData.ID)
+	assert.NotEmpty(t, attachData.State)
+	assert.Equal(t, 80, attachData.Cols)
+	assert.Equal(t, 24, attachData.Rows)
 }
