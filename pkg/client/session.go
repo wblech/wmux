@@ -73,6 +73,7 @@ func (c *Client) Attach(sessionID string) (AttachResult, error) {
 	}
 
 	result := AttachResult{
+		Snapshot: Snapshot{Scrollback: nil, Viewport: nil},
 		Session: SessionInfo{
 			ID:    attachResp.ID,
 			State: attachResp.State,

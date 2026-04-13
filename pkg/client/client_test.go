@@ -3,6 +3,7 @@ package client
 import (
 	"encoding/json"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -12,13 +13,22 @@ import (
 	"github.com/wblech/wmux/internal/platform/protocol"
 )
 
+// shortTempDir creates a short temp directory to avoid Unix socket path limits.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "wc")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
 // startMockServer creates a Unix socket server that accepts one connection
 // and performs the auth handshake, then returns the socket/token paths.
 func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()) {
 	t.Helper()
-	dir := t.TempDir()
-	socketPath = filepath.Join(dir, "daemon.sock")
-	tokenPath = filepath.Join(dir, "daemon.token")
+	dir := shortTempDir(t)
+	socketPath = filepath.Join(dir, "d.sock")
+	tokenPath = filepath.Join(dir, "d.token")
 
 	token, err := auth.Generate()
 	require.NoError(t, err)
@@ -37,13 +47,14 @@ func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()
 		pConn := protocol.NewConn(conn)
 		frame, err := pConn.ReadFrame()
 		if err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 		if frame.Type == protocol.MsgAuth && auth.Verify(token, frame.Payload) {
 			_ = pConn.WriteFrame(protocol.Frame{
 				Version: protocol.ProtocolVersion,
 				Type:    protocol.MsgOK,
+				Payload: nil,
 			})
 		} else {
 			_ = pConn.WriteFrame(protocol.Frame{
@@ -52,14 +63,13 @@ func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()
 				Payload: []byte(`{"error":"auth failed"}`),
 			})
 		}
-		// Keep connection alive until cleanup
 		<-done
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	return socketPath, tokenPath, func() {
 		close(done)
-		ln.Close()
+		_ = ln.Close()
 	}
 }
 
@@ -73,7 +83,7 @@ func TestConnect_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, c)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 }
 
 func TestConnect_BadSocket(t *testing.T) {
@@ -81,22 +91,22 @@ func TestConnect_BadSocket(t *testing.T) {
 		SocketPath: "/nonexistent/daemon.sock",
 		TokenPath:  "/nonexistent/token",
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestConnect_BadToken(t *testing.T) {
-	dir := t.TempDir()
-	socketPath := filepath.Join(dir, "daemon.sock")
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "d.sock")
 
 	ln, err := net.Listen("unix", socketPath)
 	require.NoError(t, err)
-	defer ln.Close()
+	defer ln.Close() //nolint:errcheck
 
 	_, err = Connect(Options{
 		SocketPath: socketPath,
 		TokenPath:  filepath.Join(dir, "nonexistent.token"),
 	})
-	assert.Error(t, err)
+	require.Error(t, err)
 }
 
 func TestClose(t *testing.T) {
@@ -140,9 +150,9 @@ func errFrame(msg string) protocol.Frame {
 // startMockServerWithHandlers creates a mock server that dispatches requests by message type.
 func startMockServerWithHandlers(t *testing.T, handlers map[protocol.MessageType]handlerFunc) (socketPath, tokenPath string, cleanup func()) {
 	t.Helper()
-	dir := t.TempDir()
-	socketPath = filepath.Join(dir, "daemon.sock")
-	tokenPath = filepath.Join(dir, "daemon.token")
+	dir := shortTempDir(t)
+	socketPath = filepath.Join(dir, "d.sock")
+	tokenPath = filepath.Join(dir, "d.token")
 
 	token, err := auth.Generate()
 	require.NoError(t, err)
@@ -163,24 +173,25 @@ func startMockServerWithHandlers(t *testing.T, handlers map[protocol.MessageType
 		// Auth handshake
 		frame, err := pConn.ReadFrame()
 		if err != nil {
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 		if frame.Type != protocol.MsgAuth || !auth.Verify(token, frame.Payload) {
 			_ = pConn.WriteFrame(errFrame("auth failed"))
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 		_ = pConn.WriteFrame(protocol.Frame{
 			Version: protocol.ProtocolVersion,
 			Type:    protocol.MsgOK,
+			Payload: nil,
 		})
 
 		// Dispatch loop
 		for {
 			select {
 			case <-done:
-				conn.Close()
+				_ = conn.Close()
 				return
 			default:
 			}
@@ -203,13 +214,13 @@ func startMockServerWithHandlers(t *testing.T, handlers map[protocol.MessageType
 
 	return socketPath, tokenPath, func() {
 		close(done)
-		ln.Close()
+		_ = ln.Close()
 	}
 }
 
 func TestClient_Create(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgCreate: func(payload []byte) protocol.Frame {
+		protocol.MsgCreate: func(_ []byte) protocol.Frame {
 			return okFrame(SessionInfo{ID: "s1", State: "alive", Pid: 42, Cols: 80, Rows: 24, Shell: "/bin/zsh"})
 		},
 	})
@@ -217,9 +228,16 @@ func TestClient_Create(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
-	info, err := c.Create("s1", CreateParams{Shell: "/bin/zsh", Cols: 80, Rows: 24})
+	info, err := c.Create("s1", CreateParams{
+		Shell: "/bin/zsh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
 	require.NoError(t, err)
 	assert.Equal(t, "s1", info.ID)
 	assert.Equal(t, "alive", info.State)
@@ -228,10 +246,10 @@ func TestClient_Create(t *testing.T) {
 
 func TestClient_List(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgList: func(payload []byte) protocol.Frame {
+		protocol.MsgList: func(_ []byte) protocol.Frame {
 			return okFrame([]SessionInfo{
-				{ID: "s1", State: "alive"},
-				{ID: "s2", State: "detached"},
+				{ID: "s1", State: "alive", Pid: 0, Cols: 0, Rows: 0, Shell: ""},
+				{ID: "s2", State: "detached", Pid: 0, Cols: 0, Rows: 0, Shell: ""},
 			})
 		},
 	})
@@ -239,7 +257,7 @@ func TestClient_List(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	sessions, err := c.List()
 	require.NoError(t, err)
@@ -249,7 +267,7 @@ func TestClient_List(t *testing.T) {
 
 func TestClient_Info(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgInfo: func(payload []byte) protocol.Frame {
+		protocol.MsgInfo: func(_ []byte) protocol.Frame {
 			return okFrame(SessionInfo{ID: "s1", State: "alive", Pid: 100, Cols: 120, Rows: 40, Shell: "/bin/bash"})
 		},
 	})
@@ -257,7 +275,7 @@ func TestClient_Info(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	info, err := c.Info("s1")
 	require.NoError(t, err)
@@ -268,7 +286,7 @@ func TestClient_Info(t *testing.T) {
 
 func TestClient_Attach(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgAttach: func(payload []byte) protocol.Frame {
+		protocol.MsgAttach: func(_ []byte) protocol.Frame {
 			resp := struct {
 				ID       string `json:"id"`
 				State    string `json:"state"`
@@ -297,7 +315,7 @@ func TestClient_Attach(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	result, err := c.Attach("s1")
 	require.NoError(t, err)
@@ -309,7 +327,7 @@ func TestClient_Attach(t *testing.T) {
 
 func TestClient_Attach_NoSnapshot(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgAttach: func(payload []byte) protocol.Frame {
+		protocol.MsgAttach: func(_ []byte) protocol.Frame {
 			return okFrame(struct {
 				ID    string `json:"id"`
 				State string `json:"state"`
@@ -324,7 +342,7 @@ func TestClient_Attach_NoSnapshot(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	result, err := c.Attach("s1")
 	require.NoError(t, err)
@@ -335,7 +353,7 @@ func TestClient_Attach_NoSnapshot(t *testing.T) {
 
 func TestClient_Detach(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgDetach: func(payload []byte) protocol.Frame {
+		protocol.MsgDetach: func(_ []byte) protocol.Frame {
 			return okFrame(nil)
 		},
 	})
@@ -343,7 +361,7 @@ func TestClient_Detach(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	err = c.Detach("s1")
 	assert.NoError(t, err)
@@ -351,7 +369,7 @@ func TestClient_Detach(t *testing.T) {
 
 func TestClient_Kill(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgKill: func(payload []byte) protocol.Frame {
+		protocol.MsgKill: func(_ []byte) protocol.Frame {
 			return okFrame(nil)
 		},
 	})
@@ -359,7 +377,7 @@ func TestClient_Kill(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	err = c.Kill("s1")
 	assert.NoError(t, err)
@@ -382,7 +400,7 @@ func TestClient_Write(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	err = c.Write("s1", []byte("hello"))
 	assert.NoError(t, err)
@@ -409,7 +427,7 @@ func TestClient_Resize(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	err = c.Resize("s1", 120, 40)
 	assert.NoError(t, err)
@@ -417,7 +435,7 @@ func TestClient_Resize(t *testing.T) {
 
 func TestClient_ErrorResponse(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
-		protocol.MsgKill: func(payload []byte) protocol.Frame {
+		protocol.MsgKill: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},
 	})
@@ -425,9 +443,346 @@ func TestClient_ErrorResponse(t *testing.T) {
 
 	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	err = c.Kill("nonexistent")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "session not found")
+}
+
+func TestClient_OnData(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServer(t)
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	var called bool
+	c.OnData(func(_ string, _ []byte) {
+		called = true
+	})
+	assert.NotNil(t, c.dataHandler)
+	c.dataHandler("test", []byte("data"))
+	assert.True(t, called)
+}
+
+func TestClient_OnEvent(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServer(t)
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	var called bool
+	c.OnEvent(func(_ Event) {
+		called = true
+	})
+	assert.NotNil(t, c.evtHandler)
+	c.evtHandler(Event{Type: "test", SessionID: "s1", Data: nil})
+	assert.True(t, called)
+}
+
+func TestConnect_AuthRejected(t *testing.T) {
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "d.sock")
+	tokenPath := filepath.Join(dir, "d.token")
+	badTokenPath := filepath.Join(dir, "bad.token")
+
+	// Generate the real token and a different bad token
+	token, err := auth.Generate()
+	require.NoError(t, err)
+	require.NoError(t, auth.SaveToFile(token, tokenPath))
+
+	badToken, err := auth.Generate()
+	require.NoError(t, err)
+	require.NoError(t, auth.SaveToFile(badToken, badTokenPath))
+
+	ln, err := net.Listen("unix", socketPath)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	go func() {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		pConn := protocol.NewConn(conn)
+		frame, err := pConn.ReadFrame()
+		if err != nil {
+			_ = conn.Close()
+			return
+		}
+		if frame.Type == protocol.MsgAuth && auth.Verify(token, frame.Payload) {
+			_ = pConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: nil,
+			})
+		} else {
+			_ = pConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgError,
+				Payload: []byte(`{"error":"auth failed"}`),
+			})
+		}
+		<-done
+		_ = conn.Close()
+	}()
+	defer func() {
+		close(done)
+		_ = ln.Close()
+	}()
+
+	_, err = Connect(Options{
+		SocketPath: socketPath,
+		TokenPath:  badTokenPath,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "auth failed")
+}
+
+func TestClient_Create_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgCreate: func(_ []byte) protocol.Frame {
+			return errFrame("session already exists")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.Create("s1", CreateParams{
+		Shell: "/bin/zsh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session already exists")
+}
+
+func TestClient_Attach_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgAttach: func(_ []byte) protocol.Frame {
+			return errFrame("session not found")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.Attach("nonexistent")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session not found")
+}
+
+func TestClient_Detach_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgDetach: func(_ []byte) protocol.Frame {
+			return errFrame("not attached")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	err = c.Detach("s1")
+	require.Error(t, err)
+}
+
+func TestClient_Write_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgInput: func(_ []byte) protocol.Frame {
+			return errFrame("session not found")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	err = c.Write("nonexistent", []byte("data"))
+	require.Error(t, err)
+}
+
+func TestClient_Resize_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgResize: func(_ []byte) protocol.Frame {
+			return errFrame("session not found")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	err = c.Resize("nonexistent", 80, 24)
+	require.Error(t, err)
+}
+
+func TestClient_List_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgList: func(_ []byte) protocol.Frame {
+			return errFrame("internal error")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.List()
+	require.Error(t, err)
+}
+
+func TestClient_SendRequest_ClosedConn(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgList: func(_ []byte) protocol.Frame {
+			return okFrame(nil)
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+
+	// Close the connection, then try to use it
+	require.NoError(t, c.Close())
+
+	_, err = c.List()
+	require.Error(t, err)
+
+	_, err = c.Create("x", CreateParams{Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil})
+	require.Error(t, err)
+
+	_, err = c.Attach("x")
+	require.Error(t, err)
+
+	err = c.Detach("x")
+	require.Error(t, err)
+
+	err = c.Kill("x")
+	require.Error(t, err)
+
+	err = c.Write("x", []byte("data"))
+	require.Error(t, err)
+
+	err = c.Resize("x", 80, 24)
+	require.Error(t, err)
+
+	_, err = c.Info("x")
+	require.Error(t, err)
+}
+
+func TestClient_ParseError_BadPayload(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgKill: func(_ []byte) protocol.Frame {
+			return protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgError,
+				Payload: []byte("not-json"),
+			}
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	err = c.Kill("s1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unparsable")
+}
+
+func TestClient_List_BadPayload(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgList: func(_ []byte) protocol.Frame {
+			return protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: []byte("not-json"),
+			}
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.List()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal")
+}
+
+func TestClient_Attach_BadPayload(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgAttach: func(_ []byte) protocol.Frame {
+			return protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: []byte("not-json"),
+			}
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.Attach("s1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal")
+}
+
+func TestClient_Info_BadPayload(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgInfo: func(_ []byte) protocol.Frame {
+			return protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: []byte("not-json"),
+			}
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.Info("s1")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal")
+}
+
+func TestClient_Info_Error(t *testing.T) {
+	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgInfo: func(_ []byte) protocol.Frame {
+			return errFrame("session not found")
+		},
+	})
+	defer cleanup()
+
+	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	_, err = c.Info("nonexistent")
+	require.Error(t, err)
 }

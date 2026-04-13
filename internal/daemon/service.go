@@ -424,12 +424,13 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	d.mu.Unlock()
 
 	resp := AttachResponse{
-		ID:    info.ID,
-		State: info.State,
-		Pid:   info.Pid,
-		Cols:  info.Cols,
-		Rows:  info.Rows,
-		Shell: info.Shell,
+		ID:       info.ID,
+		State:    info.State,
+		Pid:      info.Pid,
+		Cols:     info.Cols,
+		Rows:     info.Rows,
+		Shell:    info.Shell,
+		Snapshot: nil,
 	}
 
 	snap, snapErr := d.sessionSvc.Snapshot(req.SessionID)

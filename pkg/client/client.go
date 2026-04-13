@@ -38,30 +38,36 @@ func Connect(opts Options) (*Client, error) {
 		Type:    protocol.MsgAuth,
 		Payload: token,
 	}); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("client: auth write: %w", err)
 	}
 
 	frame, err := pConn.ReadFrame()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("client: auth read: %w", err)
 	}
 
 	if frame.Type != protocol.MsgOK {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("client: auth failed")
 	}
 
 	return &Client{
-		conn:  conn,
-		pConn: pConn,
+		mu:          sync.Mutex{},
+		conn:        conn,
+		pConn:       pConn,
+		dataHandler: nil,
+		evtHandler:  nil,
 	}, nil
 }
 
 // Close closes the connection to the daemon.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	if err := c.conn.Close(); err != nil {
+		return fmt.Errorf("client: close: %w", err)
+	}
+	return nil
 }
 
 // sendRequest sends a control frame and reads the response.

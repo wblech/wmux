@@ -1233,8 +1233,11 @@ func TestDaemon_AttachReturnsSessionInfo(t *testing.T) {
 	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 		ID:    "snap-sess",
 		Shell: "/bin/sh",
+		Args:  nil,
 		Cols:  80,
 		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
 	})
 	require.Equal(t, protocol.MsgOK, createResp.Type)
 

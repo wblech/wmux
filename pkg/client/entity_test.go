@@ -7,20 +7,33 @@ import (
 )
 
 func TestOptions_Defaults(t *testing.T) {
-	opts := Options{}
+	opts := Options{
+		SocketPath: "",
+		TokenPath:  "",
+	}
 	assert.Empty(t, opts.SocketPath)
 	assert.Empty(t, opts.TokenPath)
 }
 
 func TestCreateParams_Zero(t *testing.T) {
-	p := CreateParams{}
+	p := CreateParams{
+		Shell: "",
+		Args:  nil,
+		Cols:  0,
+		Rows:  0,
+		Cwd:   "",
+		Env:   nil,
+	}
 	assert.Empty(t, p.Shell)
 	assert.Equal(t, 0, p.Cols)
 	assert.Equal(t, 0, p.Rows)
 }
 
 func TestSnapshot_Empty(t *testing.T) {
-	s := Snapshot{}
+	s := Snapshot{
+		Scrollback: nil,
+		Viewport:   nil,
+	}
 	assert.Nil(t, s.Scrollback)
 	assert.Nil(t, s.Viewport)
 }
@@ -40,7 +53,14 @@ func TestSessionInfo_Fields(t *testing.T) {
 
 func TestAttachResult_WithSnapshot(t *testing.T) {
 	result := AttachResult{
-		Session: SessionInfo{ID: "s1"},
+		Session: SessionInfo{
+			ID:    "s1",
+			State: "",
+			Pid:   0,
+			Cols:  0,
+			Rows:  0,
+			Shell: "",
+		},
 		Snapshot: Snapshot{
 			Scrollback: []byte("history"),
 			Viewport:   []byte("screen"),
