@@ -738,7 +738,7 @@ func (d *Daemon) handleEnvForward(c ConnectedClient, frame protocol.Frame) {
 		return
 	}
 
-	sessionDir := filepath.Join(d.dataDir, "sessions", req.SessionID)
+	sessionDir := filepath.Join(d.dataDir, req.SessionID)
 	_ = os.MkdirAll(sessionDir, 0755) //nolint:gosec
 
 	nonPathEnv := make(map[string]string)
