@@ -7,6 +7,7 @@ import (
 
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/protocol"
+	"github.com/wblech/wmux/internal/transport"
 )
 
 // Client is a connection to a wmux daemon.
@@ -40,10 +41,14 @@ func connect(cfg *config) (*Client, error) {
 
 	pConn := protocol.NewConn(conn)
 
+	payload := make([]byte, 0, 1+auth.TokenSize)
+	payload = append(payload, byte(transport.ChannelControl))
+	payload = append(payload, token...)
+
 	if err := pConn.WriteFrame(protocol.Frame{
 		Version: protocol.ProtocolVersion,
 		Type:    protocol.MsgAuth,
-		Payload: token,
+		Payload: payload,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("client: auth write: %w", err)

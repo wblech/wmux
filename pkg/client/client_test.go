@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/protocol"
+	"github.com/wblech/wmux/internal/transport"
 )
 
 // shortTempDir creates a short temp directory to avoid Unix socket path limits.
@@ -50,7 +51,12 @@ func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()
 			_ = conn.Close()
 			return
 		}
-		if frame.Type == protocol.MsgAuth && auth.Verify(token, frame.Payload) {
+		// Payload format: [channelByte][token].
+		tokenBytes := frame.Payload
+		if len(frame.Payload) >= 1+auth.TokenSize && transport.ChannelType(frame.Payload[0]) == transport.ChannelControl {
+			tokenBytes = frame.Payload[1 : 1+auth.TokenSize]
+		}
+		if frame.Type == protocol.MsgAuth && auth.Verify(token, tokenBytes) {
 			_ = pConn.WriteFrame(protocol.Frame{
 				Version: protocol.ProtocolVersion,
 				Type:    protocol.MsgOK,
@@ -158,13 +164,17 @@ func startMockServerWithHandlers(t *testing.T, handlers map[protocol.MessageType
 		}
 		pConn := protocol.NewConn(conn)
 
-		// Auth handshake
+		// Auth handshake. Payload format: [channelByte][token].
 		frame, err := pConn.ReadFrame()
 		if err != nil {
 			_ = conn.Close()
 			return
 		}
-		if frame.Type != protocol.MsgAuth || !auth.Verify(token, frame.Payload) {
+		tokenBytes := frame.Payload
+		if len(frame.Payload) >= 1+auth.TokenSize && transport.ChannelType(frame.Payload[0]) == transport.ChannelControl {
+			tokenBytes = frame.Payload[1 : 1+auth.TokenSize]
+		}
+		if frame.Type != protocol.MsgAuth || !auth.Verify(token, tokenBytes) {
 			_ = pConn.WriteFrame(errFrame("auth failed"))
 			_ = conn.Close()
 			return
@@ -502,7 +512,12 @@ func TestNew_AuthRejected(t *testing.T) {
 			_ = conn.Close()
 			return
 		}
-		if frame.Type == protocol.MsgAuth && auth.Verify(token, frame.Payload) {
+		// Payload format: [channelByte][token].
+		tokenBytes := frame.Payload
+		if len(frame.Payload) >= 1+auth.TokenSize && transport.ChannelType(frame.Payload[0]) == transport.ChannelControl {
+			tokenBytes = frame.Payload[1 : 1+auth.TokenSize]
+		}
+		if frame.Type == protocol.MsgAuth && auth.Verify(token, tokenBytes) {
 			_ = pConn.WriteFrame(protocol.Frame{
 				Version: protocol.ProtocolVersion,
 				Type:    protocol.MsgOK,
