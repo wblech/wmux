@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -310,6 +311,10 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleMetaGet(c, frame)
 	case protocol.MsgEnvForward:
 		d.handleEnvForward(c, frame)
+	case protocol.MsgExec:
+		d.handleExec(c, frame)
+	case protocol.MsgExecSync:
+		d.handleExecSync(c, frame)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -766,6 +771,80 @@ func (d *Daemon) handleEnvForward(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	_ = c.Control().WriteFrame(okFrame(nil))
+}
+
+// handleExec processes a MsgExec frame — sends input to a session without attaching.
+func (d *Daemon) handleExec(c ConnectedClient, frame protocol.Frame) {
+	var req ExecRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid exec request"))
+		return
+	}
+
+	input := []byte(req.Input)
+	if req.Newline {
+		input = append(input, '\n')
+	}
+
+	if err := d.sessionSvc.WriteInput(req.SessionID, input); err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
+	_ = c.Control().WriteFrame(okFrame(nil))
+}
+
+// handleExecSync processes a MsgExecSync frame — sends input to multiple sessions.
+func (d *Daemon) handleExecSync(c ConnectedClient, frame protocol.Frame) {
+	var req ExecSyncRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid exec_sync request"))
+		return
+	}
+
+	if len(req.SessionIDs) > 0 && req.Prefix != "" {
+		_ = c.Control().WriteFrame(errorFrame("specify session_ids or prefix, not both"))
+		return
+	}
+
+	targets := req.SessionIDs
+	if req.Prefix != "" {
+		targets = d.sessionsByPrefix(req.Prefix)
+	}
+
+	if len(targets) == 0 {
+		_ = c.Control().WriteFrame(errorFrame("no matching sessions"))
+		return
+	}
+
+	input := []byte(req.Input)
+	if req.Newline {
+		input = append(input, '\n')
+	}
+
+	results := make([]ExecResult, 0, len(targets))
+	for _, sid := range targets {
+		if err := d.sessionSvc.WriteInput(sid, input); err != nil {
+			results = append(results, ExecResult{SessionID: sid, OK: false, Error: err.Error()})
+		} else {
+			results = append(results, ExecResult{SessionID: sid, OK: true, Error: ""})
+		}
+	}
+
+	_ = c.Control().WriteFrame(okFrame(ExecSyncResponse{Results: results}))
+}
+
+// sessionsByPrefix returns session IDs matching the given prefix.
+func (d *Daemon) sessionsByPrefix(prefix string) []string {
+	sessions := d.sessionSvc.List()
+	pfx := prefix + "/"
+	var matched []string
+	for _, s := range sessions {
+		if strings.HasPrefix(s.ID, pfx) {
+			matched = append(matched, s.ID)
+		}
+	}
+	return matched
 }
 
 // persistSessionCreate writes initial metadata and creates a scrollback writer

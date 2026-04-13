@@ -114,6 +114,33 @@ type EnvForwardRequest struct {
 	Env       map[string]string `json:"env"`
 }
 
+// ExecRequest is the JSON payload for MsgExec.
+type ExecRequest struct {
+	SessionID string `json:"session_id"`
+	Input     string `json:"input"`
+	Newline   bool   `json:"newline"`
+}
+
+// ExecSyncRequest is the JSON payload for MsgExecSync.
+type ExecSyncRequest struct {
+	SessionIDs []string `json:"session_ids,omitempty"`
+	Prefix     string   `json:"prefix,omitempty"`
+	Input      string   `json:"input"`
+	Newline    bool     `json:"newline"`
+}
+
+// ExecSyncResponse is the JSON payload for MsgExecSync responses.
+type ExecSyncResponse struct {
+	Results []ExecResult `json:"results"`
+}
+
+// ExecResult represents the outcome of an exec operation on a single session.
+type ExecResult struct {
+	SessionID string `json:"session_id"`
+	OK        bool   `json:"ok"`
+	Error     string `json:"error,omitempty"`
+}
+
 // Sentinel errors for daemon operations.
 var (
 	// ErrDaemonRunning is returned when trying to start a daemon that is already running.

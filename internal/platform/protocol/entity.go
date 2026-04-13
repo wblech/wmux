@@ -35,6 +35,8 @@ const (
 	MsgMetaSet      MessageType = 0x12
 	MsgMetaGet      MessageType = 0x13
 	MsgEnvForward   MessageType = 0x14
+	MsgExec         MessageType = 0x15
+	MsgExecSync     MessageType = 0x16
 )
 
 // String returns the lowercase name of the message type.
@@ -80,6 +82,10 @@ func (m MessageType) String() string {
 		return "meta_get"
 	case MsgEnvForward:
 		return "env_forward"
+	case MsgExec:
+		return "exec"
+	case MsgExecSync:
+		return "exec_sync"
 	default:
 		return "unknown"
 	}

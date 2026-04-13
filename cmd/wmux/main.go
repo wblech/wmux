@@ -53,6 +53,8 @@ func main() {
 		exitCode = cmdStatus(args)
 	case "events":
 		exitCode = cmdEvents(args)
+	case "exec":
+		exitCode = cmdExec(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -111,6 +113,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  list      List all sessions")
 	fmt.Fprintln(os.Stderr, "  info      Show session information")
 	fmt.Fprintln(os.Stderr, "  status    Show daemon status")
+	fmt.Fprintln(os.Stderr, "  exec      Send input to a session without attaching")
 	fmt.Fprintln(os.Stderr, "  events    Stream session events")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags:")
@@ -658,4 +661,227 @@ func cmdEvents(args []string) int {
 			}
 		}
 	}
+}
+
+func cmdExec(args []string) int {
+	if len(args) < 1 {
+		printExecUsage()
+		return 1
+	}
+
+	var (
+		syncMode  bool
+		prefix    string
+		noNewline bool
+	)
+
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--sync":
+			syncMode = true
+			i++
+			continue
+		case "--prefix":
+			if i+1 < len(args) {
+				prefix = args[i+1]
+				i += 2
+				continue
+			}
+			fmt.Fprintln(os.Stderr, "error: --prefix requires a value")
+			return 1
+		case "--no-newline":
+			noNewline = true
+			i++
+			continue
+		}
+		break
+	}
+
+	if prefix != "" {
+		return execPrefix(args[i:], prefix, !noNewline)
+	}
+	if syncMode {
+		return execSync(args[i:], !noNewline)
+	}
+	return execSingle(args[i:], !noNewline)
+}
+
+func printExecUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: wmux exec <session-id> <input>")
+	fmt.Fprintln(os.Stderr, "       wmux exec --sync <id1> <id2> ... -- <input>")
+	fmt.Fprintln(os.Stderr, "       wmux exec --prefix <prefix> -- <input>")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags:")
+	fmt.Fprintln(os.Stderr, "  --no-newline  Do not append newline to input")
+	fmt.Fprintln(os.Stderr, "  --sync        Send to multiple sessions by ID")
+	fmt.Fprintln(os.Stderr, "  --prefix      Send to all sessions matching prefix")
+}
+
+func execSingle(args []string, newline bool) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: wmux exec <session-id> <input>")
+		return 1
+	}
+
+	sessionID := args[0]
+	input := strings.Join(args[1:], " ")
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	type execReq struct {
+		SessionID string `json:"session_id"`
+		Input     string `json:"input"`
+		Newline   bool   `json:"newline"`
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgExec, execReq{
+		SessionID: sessionID,
+		Input:     input,
+		Newline:   newline,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	return 0
+}
+
+func execSync(args []string, newline bool) int {
+	sepIdx := -1
+	for i, arg := range args {
+		if arg == "--" {
+			sepIdx = i
+			break
+		}
+	}
+
+	if sepIdx < 1 || sepIdx >= len(args)-1 {
+		fmt.Fprintln(os.Stderr, "Usage: wmux exec --sync <id1> <id2> ... -- <input>")
+		return 1
+	}
+
+	sessionIDs := args[:sepIdx]
+	input := strings.Join(args[sepIdx+1:], " ")
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	type execSyncReq struct {
+		SessionIDs []string `json:"session_ids"`
+		Input      string   `json:"input"`
+		Newline    bool     `json:"newline"`
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgExecSync, execSyncReq{
+		SessionIDs: sessionIDs,
+		Input:      input,
+		Newline:    newline,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	return printExecSyncResults(resp)
+}
+
+func execPrefix(args []string, prefix string, newline bool) int {
+	sepIdx := -1
+	for i, arg := range args {
+		if arg == "--" {
+			sepIdx = i
+			break
+		}
+	}
+
+	var input string
+	switch {
+	case sepIdx >= 0 && sepIdx < len(args)-1:
+		input = strings.Join(args[sepIdx+1:], " ")
+	case len(args) > 0 && args[0] != "--":
+		input = strings.Join(args, " ")
+	default:
+		fmt.Fprintln(os.Stderr, "Usage: wmux exec --prefix <prefix> -- <input>")
+		return 1
+	}
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	type execSyncReq struct {
+		Prefix  string `json:"prefix"`
+		Input   string `json:"input"`
+		Newline bool   `json:"newline"`
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgExecSync, execSyncReq{
+		Prefix:  prefix,
+		Input:   input,
+		Newline: newline,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	return printExecSyncResults(resp)
+}
+
+func printExecSyncResults(resp protocol.Frame) int {
+	type execResult struct {
+		SessionID string `json:"session_id"`
+		OK        bool   `json:"ok"`
+		Error     string `json:"error,omitempty"`
+	}
+	type execSyncResp struct {
+		Results []execResult `json:"results"`
+	}
+
+	var syncResp execSyncResp
+	if err := json.Unmarshal(resp.Payload, &syncResp); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	hasError := false
+	for _, r := range syncResp.Results {
+		if r.OK {
+			fmt.Printf("%s: ok\n", r.SessionID)
+		} else {
+			fmt.Printf("%s: error: %s\n", r.SessionID, r.Error)
+			hasError = true
+		}
+	}
+
+	if hasError {
+		return 1
+	}
+	return 0
 }

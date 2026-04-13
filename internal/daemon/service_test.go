@@ -1671,3 +1671,297 @@ func TestDaemon_ColdRestore_MaxScrollbackSize(t *testing.T) {
 		return err == nil
 	}, 2*time.Second, 50*time.Millisecond)
 }
+
+// --- Phase 3: exec tests ---
+
+func TestDaemon_Exec(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "exec-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	resp := sendControl(t, ctrl, protocol.MsgExec, ExecRequest{
+		SessionID: "exec-sess",
+		Input:     "echo hello",
+		Newline:   true,
+	})
+	assert.Equal(t, protocol.MsgOK, resp.Type)
+}
+
+func TestDaemon_Exec_NoNewline(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "exec-nonl",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	resp := sendControl(t, ctrl, protocol.MsgExec, ExecRequest{
+		SessionID: "exec-nonl",
+		Input:     "partial",
+		Newline:   false,
+	})
+	assert.Equal(t, protocol.MsgOK, resp.Type)
+}
+
+func TestDaemon_Exec_NotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgExec, ExecRequest{
+		SessionID: "nonexistent",
+		Input:     "ls",
+		Newline:   true,
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_Exec_InvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgExec,
+		Payload: []byte("not json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_ExecSync_ByIDs(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	for _, id := range []string{"sync-s1", "sync-s2"} {
+		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+			ID:    id,
+			Shell: "/bin/sh",
+			Args:  nil,
+			Cols:  80,
+			Rows:  24,
+			Cwd:   "",
+			Env:   nil,
+		})
+		require.Equal(t, protocol.MsgOK, resp.Type)
+	}
+
+	resp := sendControl(t, ctrl, protocol.MsgExecSync, ExecSyncRequest{
+		SessionIDs: []string{"sync-s1", "sync-s2"},
+		Prefix:     "",
+		Input:      "echo sync",
+		Newline:    true,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	var syncResp ExecSyncResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &syncResp))
+	assert.Len(t, syncResp.Results, 2)
+	assert.True(t, syncResp.Results[0].OK)
+	assert.True(t, syncResp.Results[1].OK)
+}
+
+func TestDaemon_ExecSync_PartialFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "partial-s1",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	syncResp := sendControl(t, ctrl, protocol.MsgExecSync, ExecSyncRequest{
+		SessionIDs: []string{"partial-s1", "nonexistent"},
+		Prefix:     "",
+		Input:      "cmd",
+		Newline:    true,
+	})
+	require.Equal(t, protocol.MsgOK, syncResp.Type)
+
+	var result ExecSyncResponse
+	require.NoError(t, json.Unmarshal(syncResp.Payload, &result))
+	assert.Len(t, result.Results, 2)
+	assert.True(t, result.Results[0].OK)
+	assert.False(t, result.Results[1].OK)
+	assert.Contains(t, result.Results[1].Error, "not found")
+}
+
+func TestDaemon_ExecSync_ByPrefix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	for _, id := range []string{"proj-a/s1", "proj-a/s2", "proj-b/s3"} {
+		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+			ID:    id,
+			Shell: "/bin/sh",
+			Args:  nil,
+			Cols:  80,
+			Rows:  24,
+			Cwd:   "",
+			Env:   nil,
+		})
+		require.Equal(t, protocol.MsgOK, resp.Type)
+	}
+
+	resp := sendControl(t, ctrl, protocol.MsgExecSync, ExecSyncRequest{
+		SessionIDs: nil,
+		Prefix:     "proj-a",
+		Input:      "ls",
+		Newline:    true,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	var syncResp ExecSyncResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &syncResp))
+	assert.Len(t, syncResp.Results, 2)
+	for _, r := range syncResp.Results {
+		assert.True(t, r.OK)
+	}
+}
+
+func TestDaemon_ExecSync_BothIDsAndPrefix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgExecSync, ExecSyncRequest{
+		SessionIDs: []string{"s1"},
+		Prefix:     "proj-a",
+		Input:      "cmd",
+		Newline:    false,
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_ExecSync_NoMatchingSessions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgExecSync, ExecSyncRequest{
+		SessionIDs: nil,
+		Prefix:     "nonexistent",
+		Input:      "cmd",
+		Newline:    false,
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_ExecSync_InvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgExecSync,
+		Payload: []byte("not json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}

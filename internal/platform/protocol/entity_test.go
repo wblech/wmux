@@ -50,6 +50,11 @@ func TestMessageType_String_Phase2(t *testing.T) {
 	assert.Equal(t, "env_forward", MsgEnvForward.String())
 }
 
+func TestMessageType_String_Phase3(t *testing.T) {
+	assert.Equal(t, "exec", MsgExec.String())
+	assert.Equal(t, "exec_sync", MsgExecSync.String())
+}
+
 func TestMessageType_String_Unknown(t *testing.T) {
 	unknown := MessageType(0xFF)
 	assert.Equal(t, "unknown", unknown.String())
