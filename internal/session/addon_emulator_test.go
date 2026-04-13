@@ -98,6 +98,9 @@ func TestAddonEmulator_Resize(t *testing.T) {
 	// Clear the Create request written by the constructor.
 	mock.stdin.Reset()
 
+	// Pre-load the resize response that the addon would return.
+	mock.writeResponse(AddonMethodResize, "test-session", AddonStatusOK, nil)
+
 	em.Resize(120, 40)
 
 	written := mock.stdin.Bytes()

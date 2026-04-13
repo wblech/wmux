@@ -28,6 +28,7 @@ const (
 var (
 	ErrAddonFrameTooShort    = errors.New("addon: frame too short")
 	ErrAddonSnapshotTooShort = errors.New("addon: snapshot payload too short")
+	ErrAddonRequestFailed    = errors.New("addon: request failed")
 )
 
 // EncodeAddonRequest builds a binary request frame:

@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync"
 )
@@ -59,7 +60,7 @@ func (a *AddonEmulator) Snapshot() Snapshot {
 	return Snapshot{Scrollback: scrollback, Viewport: viewport}
 }
 
-// Resize sends new terminal dimensions to the addon.
+// Resize sends new terminal dimensions to the addon and waits for acknowledgement.
 func (a *AddonEmulator) Resize(cols, rows int) {
 	if a.process == nil {
 		return
@@ -68,7 +69,7 @@ func (a *AddonEmulator) Resize(cols, rows int) {
 		Cols int `json:"cols"`
 		Rows int `json:"rows"`
 	}{Cols: cols, Rows: rows})
-	a.sendRequest(AddonMethodResize, payload)
+	_, _ = a.sendRequestWithResponse(AddonMethodResize, payload)
 }
 
 // Destroy tells the addon to remove this session's xterm instance.
@@ -80,14 +81,16 @@ func (a *AddonEmulator) Destroy() {
 }
 
 // sendRequest writes a length-prefixed request frame to the addon's stdin.
+// Used for fire-and-forget operations (Process, Destroy).
 func (a *AddonEmulator) sendRequest(method AddonMethod, payload []byte) {
 	frame := EncodeAddonRequest(method, a.sessionID, payload)
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	lenBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(lenBuf, uint32(len(frame)))
-	_, _ = a.process.Stdin().Write(lenBuf)
-	_, _ = a.process.Stdin().Write(frame)
+
+	buf := make([]byte, 4+len(frame))
+	binary.BigEndian.PutUint32(buf[:4], uint32(len(frame)))
+	copy(buf[4:], frame)
+	_, _ = a.process.Stdin().Write(buf)
 }
 
 // sendRequestWithResponse writes a request and reads the response.
@@ -96,31 +99,29 @@ func (a *AddonEmulator) sendRequestWithResponse(method AddonMethod, payload []by
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	lenBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(lenBuf, uint32(len(frame)))
-	if _, err := a.process.Stdin().Write(lenBuf); err != nil {
-		return nil, err
-	}
-	if _, err := a.process.Stdin().Write(frame); err != nil {
-		return nil, err
+	buf := make([]byte, 4+len(frame))
+	binary.BigEndian.PutUint32(buf[:4], uint32(len(frame)))
+	copy(buf[4:], frame)
+	if _, err := a.process.Stdin().Write(buf); err != nil {
+		return nil, fmt.Errorf("addon: write request: %w", err)
 	}
 
 	respLenBuf := make([]byte, 4)
 	if _, err := io.ReadFull(a.process.Stdout(), respLenBuf); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("addon: read response length: %w", err)
 	}
 	respLen := binary.BigEndian.Uint32(respLenBuf)
 	respBuf := make([]byte, respLen)
 	if _, err := io.ReadFull(a.process.Stdout(), respBuf); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("addon: read response: %w", err)
 	}
 
 	_, _, status, respPayload, err := DecodeAddonResponse(respBuf)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("addon: decode response: %w", err)
 	}
 	if status != AddonStatusOK {
-		return nil, ErrAddonFrameTooShort
+		return nil, ErrAddonRequestFailed
 	}
 	return respPayload, nil
 }
