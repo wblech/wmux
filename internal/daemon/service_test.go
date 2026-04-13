@@ -1965,3 +1965,330 @@ func TestDaemon_ExecSync_InvalidPayload(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, protocol.MsgError, resp.Type)
 }
+
+func TestDaemon_Wait_UntilExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session with a short-lived command.
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-exit",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "sleep 0.1; exit 42"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Send wait request — process should exit quickly with code 42.
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-exit",
+		Mode:      "exit",
+		Timeout:   5000,
+		IdleFor:   0,
+		Pattern:   "",
+	})
+	require.Equal(t, protocol.MsgOK, waitResp.Type)
+
+	var result WaitResponse
+	require.NoError(t, json.Unmarshal(waitResp.Payload, &result))
+	assert.Equal(t, "exit", result.Mode)
+	assert.Equal(t, "wait-exit", result.SessionID)
+	assert.False(t, result.TimedOut)
+	require.NotNil(t, result.ExitCode)
+	assert.Equal(t, 42, *result.ExitCode)
+}
+
+func TestDaemon_Wait_UntilExit_Timeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a long-running session.
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-exit-to",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "sleep 60"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Wait with a short timeout.
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-exit-to",
+		Mode:      "exit",
+		Timeout:   200,
+		IdleFor:   0,
+		Pattern:   "",
+	})
+	require.Equal(t, protocol.MsgOK, waitResp.Type)
+
+	var result WaitResponse
+	require.NoError(t, json.Unmarshal(waitResp.Payload, &result))
+	assert.True(t, result.TimedOut)
+	assert.Nil(t, result.ExitCode)
+}
+
+func TestDaemon_Wait_InvalidSession(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "nonexistent",
+		Mode:      "exit",
+		Timeout:   0,
+		IdleFor:   0,
+		Pattern:   "",
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_Wait_InvalidMode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-invalid-mode",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "sleep 60"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-invalid-mode",
+		Mode:      "bogus",
+		Timeout:   0,
+		IdleFor:   0,
+		Pattern:   "",
+	})
+	assert.Equal(t, protocol.MsgError, waitResp.Type)
+}
+
+func TestDaemon_Wait_InvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgWait,
+		Payload: []byte("not json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_Wait_UntilIdle(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session that produces output briefly then stops.
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-idle",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo hello; sleep 60"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Wait for session to start producing output.
+	time.Sleep(100 * time.Millisecond)
+
+	// Wait until idle for 300ms.
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-idle",
+		Mode:      "idle",
+		Timeout:   5000,
+		IdleFor:   300,
+		Pattern:   "",
+	})
+	require.Equal(t, protocol.MsgOK, waitResp.Type)
+
+	var result WaitResponse
+	require.NoError(t, json.Unmarshal(waitResp.Payload, &result))
+	assert.Equal(t, "idle", result.Mode)
+	assert.False(t, result.TimedOut)
+}
+
+func TestDaemon_Wait_UntilIdle_Timeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session that keeps producing output.
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-idle-to",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "while true; do echo busy; sleep 0.05; done"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// IdleFor is longer than timeout — should timeout.
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-idle-to",
+		Mode:      "idle",
+		Timeout:   300,
+		IdleFor:   5000,
+		Pattern:   "",
+	})
+	require.Equal(t, protocol.MsgOK, waitResp.Type)
+
+	var result WaitResponse
+	require.NoError(t, json.Unmarshal(waitResp.Payload, &result))
+	assert.True(t, result.TimedOut)
+}
+
+func TestDaemon_Wait_UntilMatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session that prints a known marker.
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-match",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "sleep 0.2; echo 'BUILD SUCCESS'; sleep 60"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Wait for the pattern.
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-match",
+		Mode:      "match",
+		Timeout:   5000,
+		IdleFor:   0,
+		Pattern:   "BUILD SUCCESS",
+	})
+	require.Equal(t, protocol.MsgOK, waitResp.Type)
+
+	var result WaitResponse
+	require.NoError(t, json.Unmarshal(waitResp.Payload, &result))
+	assert.Equal(t, "match", result.Mode)
+	assert.True(t, result.Matched)
+	assert.False(t, result.TimedOut)
+}
+
+func TestDaemon_Wait_UntilMatch_Timeout(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "wait-match-to",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo something else; sleep 60"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	time.Sleep(50 * time.Millisecond)
+
+	waitResp := sendControl(t, ctrl, protocol.MsgWait, WaitRequest{
+		SessionID: "wait-match-to",
+		Mode:      "match",
+		Timeout:   300,
+		IdleFor:   0,
+		Pattern:   "NEVER APPEARS",
+	})
+	require.Equal(t, protocol.MsgOK, waitResp.Type)
+
+	var result WaitResponse
+	require.NoError(t, json.Unmarshal(waitResp.Payload, &result))
+	assert.True(t, result.TimedOut)
+	assert.False(t, result.Matched)
+}

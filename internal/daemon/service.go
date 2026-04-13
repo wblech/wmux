@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -151,6 +152,7 @@ type Daemon struct {
 	coldRestore       bool
 	maxScrollbackSize int64
 	scrollbackWriters map[string]*history.Writer // session_id -> writer (cold restore only)
+	waiters           map[string][]*waiter       // session_id -> list of active waiters
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -172,6 +174,7 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		coldRestore:       false,
 		maxScrollbackSize: 0,
 		scrollbackWriters: make(map[string]*history.Writer),
+		waiters:           make(map[string][]*waiter),
 	}
 
 	for _, o := range opts {
@@ -211,6 +214,8 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.mu.Unlock()
 
 	d.sessionSvc.OnExit(func(id string, exitCode int) {
+		d.notifyExitWaiters(id, exitCode)
+		d.notifyExitOnNonExitWaiters(id, exitCode)
 		d.persistSessionExit(id, exitCode)
 		d.publishEvent(event.Event{
 			Type:      event.SessionExited,
@@ -315,6 +320,8 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleExec(c, frame)
 	case protocol.MsgExecSync:
 		d.handleExecSync(c, frame)
+	case protocol.MsgWait:
+		go d.handleWait(c, frame)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -601,6 +608,7 @@ func (d *Daemon) flushOutput() {
 
 		d.scanOSC(sessID, data)
 		d.persistOutput(sessID, data)
+		d.notifyOutputWaiters(sessID, data)
 
 		payload := EncodeDataPayload(sessID, data)
 		frame := protocol.Frame{
@@ -612,6 +620,29 @@ func (d *Daemon) flushOutput() {
 		for clientID := range clients {
 			_ = d.server.BroadcastTo(clientID, frame)
 		}
+	}
+
+	// Flush output for sessions with active waiters but no attached clients.
+	d.mu.RLock()
+	waiterSessions := make([]string, 0)
+	for sessID, ws := range d.waiters {
+		if len(ws) > 0 {
+			if _, attached := sessions[sessID]; !attached {
+				waiterSessions = append(waiterSessions, sessID)
+			}
+		}
+	}
+	d.mu.RUnlock()
+
+	for _, sessID := range waiterSessions {
+		data, err := d.sessionSvc.ReadOutput(sessID)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+
+		d.scanOSC(sessID, data)
+		d.persistOutput(sessID, data)
+		d.notifyOutputWaiters(sessID, data)
 	}
 }
 
@@ -845,6 +876,262 @@ func (d *Daemon) sessionsByPrefix(prefix string) []string {
 		}
 	}
 	return matched
+}
+
+// waiter represents a single wait condition registered on a session.
+type waiter struct {
+	mode      string
+	pattern   []byte
+	idleFor   time.Duration
+	idleTimer *time.Timer
+	done      chan WaitResponse
+	cleanup   func()
+}
+
+func (d *Daemon) addWaiter(sessionID string, w *waiter) {
+	d.mu.Lock()
+	d.waiters[sessionID] = append(d.waiters[sessionID], w)
+	d.mu.Unlock()
+}
+
+func (d *Daemon) removeWaiter(sessionID string, w *waiter) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	waiters := d.waiters[sessionID]
+	for i, existing := range waiters {
+		if existing == w {
+			d.waiters[sessionID] = append(waiters[:i], waiters[i+1:]...)
+			return
+		}
+	}
+}
+
+func (d *Daemon) notifyExitWaiters(sessionID string, exitCode int) {
+	d.mu.RLock()
+	waiters := make([]*waiter, len(d.waiters[sessionID]))
+	copy(waiters, d.waiters[sessionID])
+	d.mu.RUnlock()
+
+	for _, w := range waiters {
+		if w.mode == "exit" {
+			ec := exitCode
+			select {
+			case w.done <- WaitResponse{
+				SessionID: sessionID,
+				Mode:      "exit",
+				ExitCode:  &ec,
+				Matched:   false,
+				TimedOut:  false,
+			}:
+			default:
+			}
+		}
+	}
+}
+
+func (d *Daemon) notifyOutputWaiters(sessionID string, data []byte) {
+	d.mu.RLock()
+	waiters := make([]*waiter, len(d.waiters[sessionID]))
+	copy(waiters, d.waiters[sessionID])
+	d.mu.RUnlock()
+
+	for _, w := range waiters {
+		switch w.mode {
+		case "match":
+			if bytes.Contains(data, w.pattern) {
+				select {
+				case w.done <- WaitResponse{
+					SessionID: sessionID,
+					Mode:      "match",
+					ExitCode:  nil,
+					Matched:   true,
+					TimedOut:  false,
+				}:
+				default:
+				}
+			}
+		case "idle":
+			if w.idleTimer != nil {
+				w.idleTimer.Reset(w.idleFor)
+			}
+		}
+	}
+}
+
+func (d *Daemon) notifyExitOnNonExitWaiters(sessionID string, exitCode int) {
+	d.mu.RLock()
+	waiters := make([]*waiter, len(d.waiters[sessionID]))
+	copy(waiters, d.waiters[sessionID])
+	d.mu.RUnlock()
+
+	ec := exitCode
+	for _, w := range waiters {
+		if w.mode == "idle" || w.mode == "match" {
+			select {
+			case w.done <- WaitResponse{
+				SessionID: sessionID,
+				Mode:      w.mode,
+				ExitCode:  &ec,
+				Matched:   false,
+				TimedOut:  false,
+			}:
+			default:
+			}
+		}
+	}
+}
+
+func (d *Daemon) handleWait(c ConnectedClient, frame protocol.Frame) {
+	var req WaitRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid wait request"))
+		return
+	}
+
+	if _, err := d.sessionSvc.Get(req.SessionID); err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
+	switch req.Mode {
+	case "exit":
+		d.waitUntilExit(c, req)
+	case "idle":
+		d.waitUntilIdle(c, req)
+	case "match":
+		d.waitUntilMatch(c, req)
+	default:
+		_ = c.Control().WriteFrame(errorFrame("invalid wait mode: " + req.Mode))
+	}
+}
+
+func (d *Daemon) waitUntilExit(c ConnectedClient, req WaitRequest) {
+	w := &waiter{
+		mode:      "exit",
+		pattern:   nil,
+		idleFor:   0,
+		idleTimer: nil,
+		done:      make(chan WaitResponse, 1),
+		cleanup:   func() {},
+	}
+
+	d.addWaiter(req.SessionID, w)
+	defer d.removeWaiter(req.SessionID, w)
+
+	if req.Timeout > 0 {
+		timer := time.NewTimer(time.Duration(req.Timeout) * time.Millisecond)
+		defer timer.Stop()
+
+		select {
+		case resp := <-w.done:
+			_ = c.Control().WriteFrame(okFrame(resp))
+		case <-timer.C:
+			_ = c.Control().WriteFrame(okFrame(WaitResponse{
+				SessionID: req.SessionID,
+				Mode:      "exit",
+				ExitCode:  nil,
+				Matched:   false,
+				TimedOut:  true,
+			}))
+		}
+	} else {
+		resp := <-w.done
+		_ = c.Control().WriteFrame(okFrame(resp))
+	}
+}
+
+func (d *Daemon) waitUntilIdle(c ConnectedClient, req WaitRequest) {
+	idleDuration := time.Duration(req.IdleFor) * time.Millisecond
+
+	idleTimer := time.NewTimer(idleDuration)
+	defer idleTimer.Stop()
+
+	w := &waiter{
+		mode:      "idle",
+		pattern:   nil,
+		idleFor:   idleDuration,
+		idleTimer: idleTimer,
+		done:      make(chan WaitResponse, 1),
+		cleanup:   func() {},
+	}
+
+	d.addWaiter(req.SessionID, w)
+	defer d.removeWaiter(req.SessionID, w)
+
+	if req.Timeout > 0 {
+		timeoutTimer := time.NewTimer(time.Duration(req.Timeout) * time.Millisecond)
+		defer timeoutTimer.Stop()
+
+		select {
+		case <-idleTimer.C:
+			_ = c.Control().WriteFrame(okFrame(WaitResponse{
+				SessionID: req.SessionID,
+				Mode:      "idle",
+				ExitCode:  nil,
+				Matched:   false,
+				TimedOut:  false,
+			}))
+		case resp := <-w.done:
+			_ = c.Control().WriteFrame(okFrame(resp))
+		case <-timeoutTimer.C:
+			_ = c.Control().WriteFrame(okFrame(WaitResponse{
+				SessionID: req.SessionID,
+				Mode:      "idle",
+				ExitCode:  nil,
+				Matched:   false,
+				TimedOut:  true,
+			}))
+		}
+	} else {
+		select {
+		case <-idleTimer.C:
+			_ = c.Control().WriteFrame(okFrame(WaitResponse{
+				SessionID: req.SessionID,
+				Mode:      "idle",
+				ExitCode:  nil,
+				Matched:   false,
+				TimedOut:  false,
+			}))
+		case resp := <-w.done:
+			_ = c.Control().WriteFrame(okFrame(resp))
+		}
+	}
+}
+
+func (d *Daemon) waitUntilMatch(c ConnectedClient, req WaitRequest) {
+	w := &waiter{
+		mode:      "match",
+		pattern:   []byte(req.Pattern),
+		idleFor:   0,
+		idleTimer: nil,
+		done:      make(chan WaitResponse, 1),
+		cleanup:   func() {},
+	}
+
+	d.addWaiter(req.SessionID, w)
+	defer d.removeWaiter(req.SessionID, w)
+
+	if req.Timeout > 0 {
+		timer := time.NewTimer(time.Duration(req.Timeout) * time.Millisecond)
+		defer timer.Stop()
+
+		select {
+		case resp := <-w.done:
+			_ = c.Control().WriteFrame(okFrame(resp))
+		case <-timer.C:
+			_ = c.Control().WriteFrame(okFrame(WaitResponse{
+				SessionID: req.SessionID,
+				Mode:      "match",
+				ExitCode:  nil,
+				Matched:   false,
+				TimedOut:  true,
+			}))
+		}
+	} else {
+		resp := <-w.done
+		_ = c.Control().WriteFrame(okFrame(resp))
+	}
 }
 
 // persistSessionCreate writes initial metadata and creates a scrollback writer
