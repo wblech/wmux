@@ -89,6 +89,31 @@ type SnapshotData struct {
 	Viewport   []byte
 }
 
+// MetaSetRequest is the JSON payload for MsgMetaSet.
+type MetaSetRequest struct {
+	SessionID string `json:"session_id"`
+	Key       string `json:"key"`
+	Value     string `json:"value"`
+}
+
+// MetaGetRequest is the JSON payload for MsgMetaGet.
+type MetaGetRequest struct {
+	SessionID string `json:"session_id"`
+	Key       string `json:"key"` // empty = get all
+}
+
+// MetaGetResponse is the JSON payload for MsgMetaGet responses.
+type MetaGetResponse struct {
+	Value    string            `json:"value,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+// EnvForwardRequest is the JSON payload for MsgEnvForward.
+type EnvForwardRequest struct {
+	SessionID string            `json:"session_id"`
+	Env       map[string]string `json:"env"`
+}
+
 // Sentinel errors for daemon operations.
 var (
 	// ErrDaemonRunning is returned when trying to start a daemon that is already running.
