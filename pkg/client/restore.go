@@ -51,8 +51,12 @@ func LoadSessionHistory(dataDir, sessionID string) (SessionHistory, error) {
 func CleanSessionHistory(dataDir, sessionID string) error {
 	sessionDir := filepath.Join(dataDir, sessionID)
 
-	if _, err := os.Stat(sessionDir); os.IsNotExist(err) {
-		return nil
+	if _, err := os.Stat(sessionDir); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+
+		return fmt.Errorf("client: clean history: stat: %w", err)
 	}
 
 	if err := os.RemoveAll(sessionDir); err != nil {
