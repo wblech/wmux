@@ -24,9 +24,15 @@ type DaemonConfig struct {
 	AutomationMode      string `koanf:"automation_mode"`
 }
 
+// XtermEmulatorConfig holds xterm addon settings.
+type XtermEmulatorConfig struct {
+	Bin string `koanf:"bin"`
+}
+
 // EmulatorConfig holds terminal emulator settings.
 type EmulatorConfig struct {
-	Backend string `koanf:"backend"`
+	Backend string              `koanf:"backend"`
+	Xterm   XtermEmulatorConfig `koanf:"xterm"`
 }
 
 // HistoryConfig holds session history settings.
