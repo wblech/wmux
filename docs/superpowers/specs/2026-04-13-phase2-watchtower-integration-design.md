@@ -409,7 +409,7 @@ Minimal — `history/` package already implements most of the persistence:
 
 Phase 2 introduces MADR 4.0.0 (same convention as Watchtower) for documenting architectural decisions. ADRs cover both Phase 1 (retroactive) and Phase 2 decisions.
 
-**Location:** `docs/decisions/`
+**Location:** `decisions/`
 
 ### Phase 1 (retroactive)
 

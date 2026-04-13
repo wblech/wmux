@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Write ADRs for all architectural decisions from Phase 1 (retroactive) and Phase 2 using MADR 4.0.0 format. Templates already exist at `docs/decisions/`.
+**Goal:** Write ADRs for all architectural decisions from Phase 1 (retroactive) and Phase 2 using MADR 4.0.0 format. Templates already exist at `decisions/`.
 
 **Architecture:** Each ADR is a standalone Markdown file using the bare template. Phase 1 ADRs document decisions already implemented. Phase 2 ADRs document decisions from the design spec.
 
 **Tech Stack:** Markdown, MADR 4.0.0
 
-**Prerequisites:** Sub-plans 1-4 complete. Templates at `docs/decisions/adr-template-bare.md`. Design spec at `docs/superpowers/specs/2026-04-13-phase2-watchtower-integration-design.md`. PRD at `docs/PRD.md`.
+**Prerequisites:** Sub-plans 1-4 complete. Templates at `decisions/adr-template-bare.md`. Design spec at `docs/superpowers/specs/2026-04-13-phase2-watchtower-integration-design.md`. PRD at `docs/PRD.md`.
 
 **References:**
 - [PRD](../../PRD.md)
@@ -45,7 +45,7 @@
 ### Task 1: ADR-0000 — Use MADR
 
 **Files:**
-- Create: `docs/decisions/0000-use-madr.md`
+- Create: `decisions/0000-use-madr.md`
 
 - [ ] **Step 1: Write ADR**
 
@@ -76,7 +76,7 @@ Chosen option: "MADR 4.0.0", because it provides structured capturing of decisio
 - [ ] **Step 2: Commit**
 
 ```bash
-git add -f docs/decisions/0000-use-madr.md
+git add decisions/0000-use-madr.md
 git -c commit.gpgsign=false commit -m "docs(adr): 0000 use MADR 4.0.0 for architectural decisions"
 ```
 
@@ -85,10 +85,10 @@ git -c commit.gpgsign=false commit -m "docs(adr): 0000 use MADR 4.0.0 for archit
 ### Task 2: ADR-0001 through ADR-0004 (Phase 1 foundation)
 
 **Files:**
-- Create: `docs/decisions/0001-ddd-goframe.md`
-- Create: `docs/decisions/0002-binary-wire-protocol.md`
-- Create: `docs/decisions/0003-two-channel-ipc.md`
-- Create: `docs/decisions/0004-token-file-auth.md`
+- Create: `decisions/0001-ddd-goframe.md`
+- Create: `decisions/0002-binary-wire-protocol.md`
+- Create: `decisions/0003-two-channel-ipc.md`
+- Create: `decisions/0004-token-file-auth.md`
 
 - [ ] **Step 1: Write ADR-0001 — DDD + Package-Oriented Design with goframe**
 
@@ -239,7 +239,7 @@ Chosen option: "Token file", because it's simple (32 random bytes, file-permissi
 - [ ] **Step 5: Commit all four**
 
 ```bash
-git add -f docs/decisions/0001-ddd-goframe.md docs/decisions/0002-binary-wire-protocol.md docs/decisions/0003-two-channel-ipc.md docs/decisions/0004-token-file-auth.md
+git add decisions/0001-ddd-goframe.md decisions/0002-binary-wire-protocol.md decisions/0003-two-channel-ipc.md decisions/0004-token-file-auth.md
 git -c commit.gpgsign=false commit -m "docs(adr): 0001-0004 Phase 1 foundation decisions"
 ```
 
@@ -248,11 +248,11 @@ git -c commit.gpgsign=false commit -m "docs(adr): 0001-0004 Phase 1 foundation d
 ### Task 3: ADR-0005 through ADR-0009 (Phase 1 remaining)
 
 **Files:**
-- Create: `docs/decisions/0005-pluggable-emulator.md`
-- Create: `docs/decisions/0006-backpressure-watermarks.md`
-- Create: `docs/decisions/0007-uber-fx.md`
-- Create: `docs/decisions/0008-event-bus.md`
-- Create: `docs/decisions/0009-autodaemonize.md`
+- Create: `decisions/0005-pluggable-emulator.md`
+- Create: `decisions/0006-backpressure-watermarks.md`
+- Create: `decisions/0007-uber-fx.md`
+- Create: `decisions/0008-event-bus.md`
+- Create: `decisions/0009-autodaemonize.md`
 
 - [ ] **Step 1: Write ADR-0005 — Pluggable headless emulator interface**
 
@@ -416,7 +416,7 @@ Chosen option: "Auto-fork daemon", because it provides zero-config startup. The 
 - [ ] **Step 6: Commit all five**
 
 ```bash
-git add -f docs/decisions/0005-pluggable-emulator.md docs/decisions/0006-backpressure-watermarks.md docs/decisions/0007-uber-fx.md docs/decisions/0008-event-bus.md docs/decisions/0009-autodaemonize.md
+git add decisions/0005-pluggable-emulator.md decisions/0006-backpressure-watermarks.md decisions/0007-uber-fx.md decisions/0008-event-bus.md decisions/0009-autodaemonize.md
 git -c commit.gpgsign=false commit -m "docs(adr): 0005-0009 Phase 1 remaining decisions"
 ```
 
@@ -425,10 +425,10 @@ git -c commit.gpgsign=false commit -m "docs(adr): 0005-0009 Phase 1 remaining de
 ### Task 4: ADR-0010 through ADR-0013 (Phase 2 core)
 
 **Files:**
-- Create: `docs/decisions/0010-emulator-addon-external-process.md`
-- Create: `docs/decisions/0011-single-node-process.md`
-- Create: `docs/decisions/0012-client-library-pkg.md`
-- Create: `docs/decisions/0013-two-phase-snapshot.md`
+- Create: `decisions/0010-emulator-addon-external-process.md`
+- Create: `decisions/0011-single-node-process.md`
+- Create: `decisions/0012-client-library-pkg.md`
+- Create: `decisions/0013-two-phase-snapshot.md`
 
 - [ ] **Step 1: Write ADR-0010 — Emulator addon as external process**
 
@@ -580,7 +580,7 @@ Chosen option: "Two-phase snapshot", because Watchtower's xterm.js can load scro
 - [ ] **Step 5: Commit all four**
 
 ```bash
-git add -f docs/decisions/0010-emulator-addon-external-process.md docs/decisions/0011-single-node-process.md docs/decisions/0012-client-library-pkg.md docs/decisions/0013-two-phase-snapshot.md
+git add decisions/0010-emulator-addon-external-process.md decisions/0011-single-node-process.md decisions/0012-client-library-pkg.md decisions/0013-two-phase-snapshot.md
 git -c commit.gpgsign=false commit -m "docs(adr): 0010-0013 Phase 2 core decisions"
 ```
 
@@ -589,9 +589,9 @@ git -c commit.gpgsign=false commit -m "docs(adr): 0010-0013 Phase 2 core decisio
 ### Task 5: ADR-0014 through ADR-0016 (Phase 2 remaining)
 
 **Files:**
-- Create: `docs/decisions/0014-opt-in-cold-restore.md`
-- Create: `docs/decisions/0015-env-forwarding-symlinks.md`
-- Create: `docs/decisions/0016-single-client.md`
+- Create: `decisions/0014-opt-in-cold-restore.md`
+- Create: `decisions/0015-env-forwarding-symlinks.md`
+- Create: `decisions/0016-single-client.md`
 
 - [ ] **Step 1: Write ADR-0014 — Opt-in cold restore**
 
@@ -698,7 +698,7 @@ Chosen option: "Single-client, multi-client deferred", because it significantly 
 - [ ] **Step 4: Commit all three**
 
 ```bash
-git add -f docs/decisions/0014-opt-in-cold-restore.md docs/decisions/0015-env-forwarding-symlinks.md docs/decisions/0016-single-client.md
+git add decisions/0014-opt-in-cold-restore.md decisions/0015-env-forwarding-symlinks.md decisions/0016-single-client.md
 git -c commit.gpgsign=false commit -m "docs(adr): 0014-0016 Phase 2 remaining decisions"
 ```
 

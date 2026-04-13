@@ -45,4 +45,4 @@ Sub-plan 1 (Emulator Addon) ──► Sub-plan 2 (Client Library + Warm Attach)
 | 2 | `pkg/client/` (5 files), `docs/integration-guide.md` | `internal/daemon/service.go`, `internal/daemon/entity.go`, `internal/platform/protocol/entity.go` |
 | 3 | `internal/daemon/environment.go`, `internal/daemon/osc.go`, `pkg/client/metadata.go`, `pkg/client/environment.go` | `internal/session/entity.go`, `internal/platform/event/entity.go`, `internal/platform/protocol/entity.go`, `internal/daemon/service.go`, `internal/daemon/entity.go` |
 | 4 | `pkg/client/restore.go` | `internal/platform/config/config.go`, `internal/daemon/service.go`, `pkg/client/entity.go` |
-| 5 | `docs/decisions/0000-*.md` through `docs/decisions/0016-*.md` | — |
+| 5 | `decisions/0000-*.md` through `decisions/0016-*.md` | — |
