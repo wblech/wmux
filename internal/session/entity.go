@@ -83,6 +83,8 @@ type Session struct {
 	StartedAt time.Time
 	// EndedAt is the time when the session ended (zero if still running).
 	EndedAt time.Time
+	// Metadata holds integrator-defined key-value pairs.
+	Metadata map[string]string
 }
 
 // Sentinel errors for session operations.

@@ -544,3 +544,73 @@ func TestService_SpawnSemaphoreZero(t *testing.T) {
 	_, err := svc.Create("no-limit", defaultCreateOpts())
 	assert.NoError(t, err)
 }
+
+func TestService_MetaSet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.Create("meta-1", defaultCreateOpts())
+	require.NoError(t, err)
+
+	err = svc.MetaSet("meta-1", "app", "watchtower")
+	require.NoError(t, err)
+
+	val, err := svc.MetaGet("meta-1", "app")
+	require.NoError(t, err)
+	assert.Equal(t, "watchtower", val)
+}
+
+func TestService_MetaSetNotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	err := svc.MetaSet("ghost", "k", "v")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_MetaGetNotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.MetaGet("ghost", "k")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_MetaGetAll(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.Create("meta-all", defaultCreateOpts())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.MetaSet("meta-all", "app", "watchtower"))
+	require.NoError(t, svc.MetaSet("meta-all", "env", "prod"))
+
+	meta, err := svc.MetaGetAll("meta-all")
+	require.NoError(t, err)
+	assert.Equal(t, "watchtower", meta["app"])
+	assert.Equal(t, "prod", meta["env"])
+}
+
+func TestService_MetaGetAllNotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.MetaGetAll("ghost")
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_MetaGetAllReturnsDefensiveCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+	_, err := svc.Create("meta-copy", defaultCreateOpts())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.MetaSet("meta-copy", "k", "v"))
+
+	meta, err := svc.MetaGetAll("meta-copy")
+	require.NoError(t, err)
+	meta["k"] = "tampered"
+
+	val, err := svc.MetaGet("meta-copy", "k")
+	require.NoError(t, err)
+	assert.Equal(t, "v", val, "MetaGetAll should return a defensive copy")
+}

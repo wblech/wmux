@@ -185,6 +185,7 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 		ExitCode:  0,
 		StartedAt: time.Now(),
 		EndedAt:   time.Time{},
+		Metadata:  nil,
 	}
 
 	var emulator ScreenEmulator
@@ -373,6 +374,47 @@ func (s *Service) Snapshot(id string) (Snapshot, error) {
 	}
 
 	return ms.emulator.Snapshot(), nil
+}
+
+// MetaSet sets a metadata key-value pair on a session.
+func (s *Service) MetaSet(id, key, value string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ms, ok := s.sessions[id]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	if ms.session.Metadata == nil {
+		ms.session.Metadata = make(map[string]string)
+	}
+	ms.session.Metadata[key] = value
+	return nil
+}
+
+// MetaGet returns a metadata value for a session.
+func (s *Service) MetaGet(id, key string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ms, ok := s.sessions[id]
+	if !ok {
+		return "", ErrSessionNotFound
+	}
+	return ms.session.Metadata[key], nil
+}
+
+// MetaGetAll returns all metadata for a session.
+func (s *Service) MetaGetAll(id string) (map[string]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ms, ok := s.sessions[id]
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+	result := make(map[string]string, len(ms.session.Metadata))
+	for k, v := range ms.session.Metadata {
+		result[k] = v
+	}
+	return result, nil
 }
 
 // ReadOutput drains all buffered output from the session.
