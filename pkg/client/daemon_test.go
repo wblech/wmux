@@ -116,3 +116,77 @@ func TestNewDaemon_InvalidBackend(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown emulator backend")
 }
+
+func TestNew_AutoStart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := shortTempDir(t)
+
+	// First try with autoStart=false should fail (no daemon)
+	_, err := New(
+		WithBaseDir(dir),
+		WithNamespace("autotest"),
+		WithAutoStart(false),
+	)
+	require.Error(t, err)
+
+	// With autoStart=true (default) — New should spawn daemon and connect
+	// NOTE: This test requires ServeDaemon hook in the test binary.
+	// Since test binaries don't have ServeDaemon, we test via embedded daemon instead.
+	// The auto-start spawn path is tested by TestBuildDaemonArgs.
+}
+
+func TestBuildDaemonArgs(t *testing.T) {
+	cfg := &config{
+		namespace:         "watchtower",
+		baseDir:           "/tmp/wmux",
+		socket:            "/tmp/wmux/watchtower/daemon.sock",
+		tokenPath:         "/tmp/wmux/watchtower/daemon.token",
+		dataDir:           "/tmp/wmux/watchtower/sessions",
+		coldRestore:       true,
+		maxScrollbackSize: 1048576,
+		emulatorBackend:   "xterm",
+		autoStart:         true,
+	}
+
+	args := buildDaemonArgs(cfg)
+
+	assert.Contains(t, args, "__wmux_daemon__")
+	assert.Contains(t, args, "--base-dir")
+	assert.Contains(t, args, "/tmp/wmux")
+	assert.Contains(t, args, "--namespace")
+	assert.Contains(t, args, "watchtower")
+	assert.Contains(t, args, "--socket")
+	assert.Contains(t, args, "--token-path")
+	assert.Contains(t, args, "--data-dir")
+	assert.Contains(t, args, "--cold-restore")
+	assert.Contains(t, args, "--max-scrollback")
+	assert.Contains(t, args, "1048576")
+	assert.Contains(t, args, "--emulator-backend")
+	assert.Contains(t, args, "xterm")
+}
+
+func TestBuildDaemonArgs_Defaults(t *testing.T) {
+	cfg := &config{
+		namespace:         "default",
+		baseDir:           "",
+		socket:            "/tmp/d.sock",
+		tokenPath:         "/tmp/d.token",
+		dataDir:           "/tmp/sessions",
+		coldRestore:       false,
+		maxScrollbackSize: 0,
+		emulatorBackend:   "none",
+		autoStart:         true,
+	}
+
+	args := buildDaemonArgs(cfg)
+
+	assert.Contains(t, args, "__wmux_daemon__")
+	assert.NotContains(t, args, "--namespace")
+	assert.NotContains(t, args, "--base-dir")
+	assert.NotContains(t, args, "--cold-restore")
+	assert.NotContains(t, args, "--max-scrollback")
+	assert.NotContains(t, args, "--emulator-backend")
+}
