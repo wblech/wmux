@@ -96,8 +96,8 @@ type Config struct {
 	Resize       ResizeConfig       `koanf:"resize"`
 }
 
-// defaults returns a Config populated with all PRD-specified default values.
-func defaults() *Config {
+// Defaults returns a Config populated with all PRD-specified default values.
+func Defaults() *Config {
 	return &Config{
 		Daemon: DaemonConfig{
 			Socket:              "~/.wmux/daemon.sock",
@@ -155,7 +155,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("config: load %q: %w", path, err)
 	}
 
-	cfg := defaults()
+	cfg := Defaults()
 	if err := k.UnmarshalWithConf("", cfg, koanf.UnmarshalConf{Tag: "koanf", FlatPaths: false, DecoderConfig: nil}); err != nil {
 		return nil, fmt.Errorf("config: unmarshal: %w", err)
 	}

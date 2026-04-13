@@ -166,9 +166,17 @@ bin = "/usr/local/bin/wmux-emulator-xterm"
 }
 
 func TestDefaults_EmulatorXterm(t *testing.T) {
-	cfg := defaults()
+	cfg := Defaults()
 	assert.Equal(t, "none", cfg.Emulator.Backend)
 	assert.Empty(t, cfg.Emulator.Xterm.Bin)
+}
+
+func TestDefaults_ReturnsValidConfig(t *testing.T) {
+	cfg := Defaults()
+	assert.Equal(t, "none", cfg.Emulator.Backend)
+	assert.False(t, cfg.History.ColdRestore)
+	assert.Equal(t, "0", cfg.History.MaxPerSession)
+	assert.Equal(t, "same-user", cfg.Daemon.AutomationMode)
 }
 
 func TestLoad_ColdRestore(t *testing.T) {
@@ -185,7 +193,7 @@ cold_restore = true
 }
 
 func TestDefaults_ColdRestoreFalse(t *testing.T) {
-	cfg := defaults()
+	cfg := Defaults()
 	assert.False(t, cfg.History.ColdRestore)
 }
 

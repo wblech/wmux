@@ -8,6 +8,7 @@ import (
 
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/auth"
+	"github.com/wblech/wmux/internal/platform/config"
 	"github.com/wblech/wmux/internal/platform/event"
 	"github.com/wblech/wmux/internal/platform/ipc"
 	"github.com/wblech/wmux/internal/platform/pty"
@@ -47,6 +48,18 @@ func cmdDaemon(args []string) int {
 				i++
 			}
 		}
+	}
+
+	// Load config (optional — defaults used if file absent).
+	configPath := filepath.Join(baseDir, "config.toml")
+	cfg := config.Defaults()
+	if _, err := os.Stat(configPath); err == nil {
+		loaded, err := config.Load(configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: load config: %v\n", err)
+			return 1
+		}
+		cfg = loaded
 	}
 
 	// Ensure base directory exists.
@@ -90,6 +103,7 @@ func cmdDaemon(args []string) int {
 		daemon.WithDataDir(dataDir),
 		daemon.WithVersion("0.1.0"),
 		daemon.WithEventBus(eventBus),
+		daemon.WithColdRestore(cfg.History.ColdRestore),
 	)
 
 	fmt.Fprintf(os.Stderr, "wmux daemon listening on %s\n", expandedSocket)
