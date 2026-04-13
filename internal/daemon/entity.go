@@ -141,6 +141,24 @@ type ExecResult struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// WaitRequest is the JSON payload for MsgWait.
+type WaitRequest struct {
+	SessionID string `json:"session_id"`
+	Mode      string `json:"mode"`
+	Timeout   int64  `json:"timeout"`
+	IdleFor   int64  `json:"idle_for,omitempty"`
+	Pattern   string `json:"pattern,omitempty"`
+}
+
+// WaitResponse is the JSON payload for MsgWait responses.
+type WaitResponse struct {
+	SessionID string `json:"session_id"`
+	Mode      string `json:"mode"`
+	ExitCode  *int   `json:"exit_code"`
+	Matched   bool   `json:"matched"`
+	TimedOut  bool   `json:"timed_out"`
+}
+
 // Sentinel errors for daemon operations.
 var (
 	// ErrDaemonRunning is returned when trying to start a daemon that is already running.
