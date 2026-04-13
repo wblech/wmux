@@ -30,7 +30,7 @@ func TestClient_ForwardEnv(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -46,7 +46,7 @@ func TestClient_ForwardEnv_EmptyMap(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -62,7 +62,7 @@ func TestClient_ForwardEnv_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 

@@ -1,14 +1,6 @@
 // Package client provides a Go client library for the wmux daemon.
 package client
 
-// Options configures the client connection to the wmux daemon.
-type Options struct {
-	// SocketPath is the Unix socket to connect to.
-	SocketPath string
-	// TokenPath is the token file for authentication.
-	TokenPath string
-}
-
 // CreateParams holds parameters for creating a new session.
 type CreateParams struct {
 	// Shell is the path to the shell binary.

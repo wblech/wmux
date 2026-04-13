@@ -6,13 +6,18 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestOptions_Defaults(t *testing.T) {
-	opts := Options{
-		SocketPath: "",
-		TokenPath:  "",
+func TestSessionHistory_Fields(t *testing.T) {
+	h := SessionHistory{
+		Scrollback: []byte("log"),
+		SessionID:  "s1",
+		Shell:      "/bin/zsh",
+		Cwd:        "/home/user",
+		Cols:       80,
+		Rows:       24,
 	}
-	assert.Empty(t, opts.SocketPath)
-	assert.Empty(t, opts.TokenPath)
+	assert.Equal(t, "s1", h.SessionID)
+	assert.Equal(t, "/bin/zsh", h.Shell)
+	assert.Equal(t, 80, h.Cols)
 }
 
 func TestCreateParams_Zero(t *testing.T) {

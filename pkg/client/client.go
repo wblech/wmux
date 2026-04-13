@@ -18,15 +18,22 @@ type Client struct {
 	evtHandler  func(Event)
 }
 
-// Connect establishes a connection to the wmux daemon, authenticates, and
+// New establishes a connection to the wmux daemon, authenticates, and
 // returns a ready-to-use Client.
-func Connect(opts Options) (*Client, error) {
-	token, err := auth.LoadFromFile(opts.TokenPath)
+func New(opts ...Option) (*Client, error) {
+	cfg := newConfig(opts...)
+	resolveConfig(cfg)
+	return connect(cfg)
+}
+
+// connect dials the daemon and performs the auth handshake using the given config.
+func connect(cfg *config) (*Client, error) {
+	token, err := auth.LoadFromFile(cfg.tokenPath)
 	if err != nil {
 		return nil, fmt.Errorf("client: read token: %w", err)
 	}
 
-	conn, err := net.Dial("unix", opts.SocketPath)
+	conn, err := net.Dial("unix", cfg.socket)
 	if err != nil {
 		return nil, fmt.Errorf("client: dial: %w", err)
 	}

@@ -73,28 +73,22 @@ func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()
 	}
 }
 
-func TestConnect_Success(t *testing.T) {
+func TestNew_Success(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServer(t)
 	defer cleanup()
 
-	c, err := Connect(Options{
-		SocketPath: socketPath,
-		TokenPath:  tokenPath,
-	})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	require.NotNil(t, c)
 	defer c.Close() //nolint:errcheck
 }
 
-func TestConnect_BadSocket(t *testing.T) {
-	_, err := Connect(Options{
-		SocketPath: "/nonexistent/daemon.sock",
-		TokenPath:  "/nonexistent/token",
-	})
+func TestNew_BadSocket(t *testing.T) {
+	_, err := New(WithSocket("/nonexistent/daemon.sock"), WithTokenPath("/nonexistent/token"), WithAutoStart(false))
 	require.Error(t, err)
 }
 
-func TestConnect_BadToken(t *testing.T) {
+func TestNew_BadToken(t *testing.T) {
 	dir := shortTempDir(t)
 	socketPath := filepath.Join(dir, "d.sock")
 
@@ -102,10 +96,7 @@ func TestConnect_BadToken(t *testing.T) {
 	require.NoError(t, err)
 	defer ln.Close() //nolint:errcheck
 
-	_, err = Connect(Options{
-		SocketPath: socketPath,
-		TokenPath:  filepath.Join(dir, "nonexistent.token"),
-	})
+	_, err = New(WithSocket(socketPath), WithTokenPath(filepath.Join(dir, "nonexistent.token")), WithAutoStart(false))
 	require.Error(t, err)
 }
 
@@ -113,10 +104,7 @@ func TestClose(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServer(t)
 	defer cleanup()
 
-	c, err := Connect(Options{
-		SocketPath: socketPath,
-		TokenPath:  tokenPath,
-	})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 
 	err = c.Close()
@@ -226,7 +214,7 @@ func TestClient_Create(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -255,7 +243,7 @@ func TestClient_List(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -273,7 +261,7 @@ func TestClient_Info(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -313,7 +301,7 @@ func TestClient_Attach(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -340,7 +328,7 @@ func TestClient_Attach_NoSnapshot(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -359,7 +347,7 @@ func TestClient_Detach(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -375,7 +363,7 @@ func TestClient_Kill(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -398,7 +386,7 @@ func TestClient_Write(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -425,7 +413,7 @@ func TestClient_Resize(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -441,7 +429,7 @@ func TestClient_ErrorResponse(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -454,7 +442,7 @@ func TestClient_OnData(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServer(t)
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -471,7 +459,7 @@ func TestClient_OnEvent(t *testing.T) {
 	socketPath, tokenPath, cleanup := startMockServer(t)
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -484,7 +472,7 @@ func TestClient_OnEvent(t *testing.T) {
 	assert.True(t, called)
 }
 
-func TestConnect_AuthRejected(t *testing.T) {
+func TestNew_AuthRejected(t *testing.T) {
 	dir := shortTempDir(t)
 	socketPath := filepath.Join(dir, "d.sock")
 	tokenPath := filepath.Join(dir, "d.token")
@@ -535,10 +523,7 @@ func TestConnect_AuthRejected(t *testing.T) {
 		_ = ln.Close()
 	}()
 
-	_, err = Connect(Options{
-		SocketPath: socketPath,
-		TokenPath:  badTokenPath,
-	})
+	_, err = New(WithSocket(socketPath), WithTokenPath(badTokenPath), WithAutoStart(false))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "auth failed")
 }
@@ -551,7 +536,7 @@ func TestClient_Create_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -575,7 +560,7 @@ func TestClient_Attach_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -592,7 +577,7 @@ func TestClient_Detach_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -608,7 +593,7 @@ func TestClient_Write_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -624,7 +609,7 @@ func TestClient_Resize_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -640,7 +625,7 @@ func TestClient_List_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -656,7 +641,7 @@ func TestClient_SendRequest_ClosedConn(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 
 	// Close the connection, then try to use it
@@ -699,7 +684,7 @@ func TestClient_ParseError_BadPayload(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -720,7 +705,7 @@ func TestClient_List_BadPayload(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -741,7 +726,7 @@ func TestClient_Attach_BadPayload(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -762,7 +747,7 @@ func TestClient_Info_BadPayload(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
@@ -779,7 +764,7 @@ func TestClient_Info_Error(t *testing.T) {
 	})
 	defer cleanup()
 
-	c, err := Connect(Options{SocketPath: socketPath, TokenPath: tokenPath})
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
 
