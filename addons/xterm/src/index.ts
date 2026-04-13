@@ -14,15 +14,51 @@ import {
 import { InstanceManager } from "./manager.js";
 
 const manager = new InstanceManager();
-let inputBuffer = Buffer.alloc(0);
+
+// Chunked input buffer: stores incoming pieces without copying on every chunk.
+const chunks: Buffer[] = [];
+let totalLen = 0;
+
+function flushChunks(): Buffer {
+  if (chunks.length === 1) {
+    const buf = chunks[0];
+    chunks.length = 0;
+    totalLen = 0;
+    return buf;
+  }
+  const buf = Buffer.concat(chunks, totalLen);
+  chunks.length = 0;
+  totalLen = 0;
+  return buf;
+}
+
+function parseJSON(buf: Buffer): Record<string, unknown> | null {
+  try {
+    return JSON.parse(buf.toString()) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 function handleRequest(frame: Buffer): Buffer | null {
   const req = decodeRequest(frame);
 
   switch (req.method) {
     case METHOD_CREATE: {
-      const params = JSON.parse(req.payload.toString());
-      manager.create(req.sessionId, params.cols, params.rows);
+      const params = parseJSON(req.payload);
+      if (!params) {
+        return encodeResponse({
+          method: req.method,
+          sessionId: req.sessionId,
+          status: STATUS_ERROR,
+          payload: Buffer.from("invalid JSON payload"),
+        });
+      }
+      manager.create(
+        req.sessionId,
+        params.cols as number,
+        params.rows as number
+      );
       return encodeResponse({
         method: req.method,
         sessionId: req.sessionId,
@@ -47,8 +83,20 @@ function handleRequest(frame: Buffer): Buffer | null {
     }
 
     case METHOD_RESIZE: {
-      const params = JSON.parse(req.payload.toString());
-      manager.resize(req.sessionId, params.cols, params.rows);
+      const params = parseJSON(req.payload);
+      if (!params) {
+        return encodeResponse({
+          method: req.method,
+          sessionId: req.sessionId,
+          status: STATUS_ERROR,
+          payload: Buffer.from("invalid JSON payload"),
+        });
+      }
+      manager.resize(
+        req.sessionId,
+        params.cols as number,
+        params.rows as number
+      );
       return encodeResponse({
         method: req.method,
         sessionId: req.sessionId,
@@ -69,6 +117,13 @@ function handleRequest(frame: Buffer): Buffer | null {
 
     case METHOD_SHUTDOWN: {
       manager.destroyAll();
+      const resp = encodeResponse({
+        method: req.method,
+        sessionId: req.sessionId,
+        status: STATUS_OK,
+        payload: Buffer.alloc(0),
+      });
+      writeResponse(resp);
       process.exit(0);
     }
 
@@ -84,22 +139,31 @@ function handleRequest(frame: Buffer): Buffer | null {
 }
 
 function writeResponse(resp: Buffer): void {
-  const lenBuf = Buffer.alloc(4);
-  lenBuf.writeUInt32BE(resp.length, 0);
-  process.stdout.write(lenBuf);
-  process.stdout.write(resp);
+  const out = Buffer.alloc(4 + resp.length);
+  out.writeUInt32BE(resp.length, 0);
+  resp.copy(out, 4);
+  process.stdout.write(out);
 }
 
 process.stdin.on("data", (chunk: Buffer) => {
-  inputBuffer = Buffer.concat([inputBuffer, chunk]);
+  chunks.push(chunk);
+  totalLen += chunk.length;
 
+  let inputBuffer = flushChunks();
   let result: ReturnType<typeof readFrame>;
+
   while ((result = readFrame(inputBuffer, 0)) !== null) {
     const resp = handleRequest(result.frame);
     if (resp !== null) {
       writeResponse(resp);
     }
     inputBuffer = inputBuffer.subarray(result.newOffset);
+  }
+
+  // Put remainder back if there's leftover data
+  if (inputBuffer.length > 0) {
+    chunks.push(inputBuffer);
+    totalLen = inputBuffer.length;
   }
 });
 

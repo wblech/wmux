@@ -3,6 +3,8 @@ const { Terminal } = xterm;
 type TerminalInstance = InstanceType<typeof Terminal>;
 import { encodeSnapshotPayload } from "./protocol.js";
 
+const EMPTY_SNAPSHOT = encodeSnapshotPayload(Buffer.alloc(0), Buffer.alloc(0));
+
 export class InstanceManager {
   private instances: Map<string, TerminalInstance> = new Map();
 
@@ -22,9 +24,11 @@ export class InstanceManager {
 
   snapshot(sessionId: string): Buffer {
     const term = this.instances.get(sessionId);
-    if (!term) return encodeSnapshotPayload(Buffer.alloc(0), Buffer.alloc(0));
+    if (!term) return EMPTY_SNAPSHOT;
 
     const buffer = term.buffer.active;
+    if (!buffer) return EMPTY_SNAPSHOT;
+
     const lines: string[] = [];
 
     // Scrollback: lines from 0 to baseY
@@ -59,7 +63,8 @@ export class InstanceManager {
   }
 
   destroyAll(): void {
-    for (const [id] of this.instances) {
+    const ids = [...this.instances.keys()];
+    for (const id of ids) {
       this.destroy(id);
     }
   }
