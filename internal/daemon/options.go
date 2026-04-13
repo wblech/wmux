@@ -30,3 +30,12 @@ func WithEventBus(bus EventBus) Option {
 		d.eventBus = bus
 	}
 }
+
+// WithColdRestore enables or disables cold restore (history persistence to disk).
+// When enabled and a data directory is set, the daemon writes session metadata
+// and scrollback to disk so sessions can be restored after a daemon restart.
+func WithColdRestore(enabled bool) Option {
+	return func(d *Daemon) {
+		d.coldRestore = enabled
+	}
+}

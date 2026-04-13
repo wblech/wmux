@@ -159,6 +159,18 @@ func (a *testSessionAdapter) LastActivity(id string) (time.Time, error) {
 	return a.svc.LastActivity(id) //nolint:wrapcheck
 }
 
+func (a *testSessionAdapter) MetaSet(id, key, value string) error {
+	return a.svc.MetaSet(id, key, value) //nolint:wrapcheck
+}
+
+func (a *testSessionAdapter) MetaGet(id, key string) (string, error) {
+	return a.svc.MetaGet(id, key) //nolint:wrapcheck
+}
+
+func (a *testSessionAdapter) MetaGetAll(id string) (map[string]string, error) {
+	return a.svc.MetaGetAll(id) //nolint:wrapcheck
+}
+
 func (a *testSessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
@@ -1252,4 +1264,355 @@ func TestDaemon_AttachReturnsSessionInfo(t *testing.T) {
 	assert.NotEmpty(t, attachData.State)
 	assert.Equal(t, 80, attachData.Cols)
 	assert.Equal(t, 24, attachData.Rows)
+}
+
+func TestDaemon_MetaSetAndGet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "meta-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Set metadata.
+	setResp := sendControl(t, ctrl, protocol.MsgMetaSet, MetaSetRequest{
+		SessionID: "meta-sess",
+		Key:       "app",
+		Value:     "watchtower",
+	})
+	require.Equal(t, protocol.MsgOK, setResp.Type)
+
+	// Get single key.
+	getResp := sendControl(t, ctrl, protocol.MsgMetaGet, MetaGetRequest{
+		SessionID: "meta-sess",
+		Key:       "app",
+	})
+	require.Equal(t, protocol.MsgOK, getResp.Type)
+
+	var metaResp MetaGetResponse
+	require.NoError(t, json.Unmarshal(getResp.Payload, &metaResp))
+	assert.Equal(t, "watchtower", metaResp.Value)
+
+	// Get all metadata.
+	getAllResp := sendControl(t, ctrl, protocol.MsgMetaGet, MetaGetRequest{
+		SessionID: "meta-sess",
+		Key:       "",
+	})
+	require.Equal(t, protocol.MsgOK, getAllResp.Type)
+
+	var allResp MetaGetResponse
+	require.NoError(t, json.Unmarshal(getAllResp.Payload, &allResp))
+	assert.Equal(t, "watchtower", allResp.Metadata["app"])
+}
+
+func TestDaemon_MetaSetNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgMetaSet, MetaSetRequest{
+		SessionID: "no-such",
+		Key:       "k",
+		Value:     "v",
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_MetaSetInvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgMetaSet,
+		Payload: []byte("{bad json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_MetaGetInvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgMetaGet,
+		Payload: []byte("{bad json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_EnvForward(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	d, token, sock := testDaemon(t, WithDataDir(dir))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "env-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	envResp := sendControl(t, ctrl, protocol.MsgEnvForward, EnvForwardRequest{
+		SessionID: "env-sess",
+		Env:       map[string]string{"DISPLAY": ":0"},
+	})
+	require.Equal(t, protocol.MsgOK, envResp.Type)
+}
+
+func TestDaemon_EnvForwardNoDataDir(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t) // no WithDataDir
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	envResp := sendControl(t, ctrl, protocol.MsgEnvForward, EnvForwardRequest{
+		SessionID: "whatever",
+		Env:       map[string]string{"DISPLAY": ":0"},
+	})
+	require.Equal(t, protocol.MsgOK, envResp.Type)
+}
+
+func TestDaemon_EnvForwardInvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgEnvForward,
+		Payload: []byte("{bad json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+// TestDaemon_ColdRestore_Disabled_NoHistoryWritten verifies that no history
+// files are written when cold restore is not enabled.
+func TestDaemon_ColdRestore_Disabled_NoHistoryWritten(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dataDir := t.TempDir()
+	d, token, sock := testDaemon(t, WithDataDir(dataDir))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "no-history",
+		Shell: "/bin/sh",
+		Cols:  80,
+		Rows:  24,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	killResp := sendControl(t, ctrl, protocol.MsgKill, SessionIDRequest{SessionID: "no-history"})
+	require.Equal(t, protocol.MsgOK, killResp.Type)
+
+	time.Sleep(50 * time.Millisecond)
+
+	// No session directory should exist.
+	_, err := os.Stat(filepath.Join(dataDir, "no-history"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestDaemon_ColdRestore_Enabled_WritesMetadata verifies that metadata is
+// written on session create when cold restore is enabled.
+func TestDaemon_ColdRestore_Enabled_WritesMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dataDir := t.TempDir()
+	d, token, sock := testDaemon(t, WithDataDir(dataDir), WithColdRestore(true))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "cold-meta",
+		Shell: "/bin/sh",
+		Cols:  80,
+		Rows:  24,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	sessionDir := filepath.Join(dataDir, "cold-meta")
+	_, err := os.Stat(filepath.Join(sessionDir, "meta.json"))
+	require.NoError(t, err, "meta.json should exist after create")
+
+	_, err = os.Stat(filepath.Join(sessionDir, "scrollback.bin"))
+	require.NoError(t, err, "scrollback.bin should exist after create")
+}
+
+// TestDaemon_ColdRestore_Enabled_ExitUpdatesMetadata verifies that metadata is
+// updated with exit info when a session exits and cold restore is enabled.
+func TestDaemon_ColdRestore_Enabled_ExitUpdatesMetadata(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dataDir := t.TempDir()
+	eb := newTestEventBus()
+	d, token, sock := testDaemon(t, WithDataDir(dataDir), WithColdRestore(true), WithEventBus(eb))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session that exits immediately.
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "cold-exit",
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "exit 0"},
+		Cols:  80,
+		Rows:  24,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	// Wait for SessionExited event (process exits immediately).
+	sessionDir := filepath.Join(dataDir, "cold-exit")
+	require.Eventually(t, func() bool {
+		for _, evt := range eb.Events() {
+			if evt.Type == event.SessionExited && evt.SessionID == "cold-exit" {
+				return true
+			}
+		}
+		return false
+	}, 3*time.Second, 50*time.Millisecond, "should receive SessionExited event")
+
+	metaData, err := os.ReadFile(filepath.Join(sessionDir, "meta.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(metaData), "ended_at")
+}
+
+// TestDaemon_ColdRestore_Enabled_ScrollbackPersisted verifies that output data
+// is written to scrollback.bin when cold restore is enabled.
+func TestDaemon_ColdRestore_Enabled_ScrollbackPersisted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dataDir := t.TempDir()
+	d, token, sock := testDaemon(t, WithDataDir(dataDir), WithColdRestore(true))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, clientID := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	stream := dialStream(t, sock, token, clientID)
+	defer stream.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "cold-scroll",
+		Shell: "/bin/sh",
+		Cols:  80,
+		Rows:  24,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	attachResp := sendControl(t, ctrl, protocol.MsgAttach, SessionIDRequest{SessionID: "cold-scroll"})
+	require.Equal(t, protocol.MsgOK, attachResp.Type)
+
+	inputPayload := EncodeInputPayload("cold-scroll", []byte("echo cold-restore-test\n"))
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgInput,
+		Payload: inputPayload,
+	})
+	require.NoError(t, err)
+
+	inputAck, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	require.Equal(t, protocol.MsgOK, inputAck.Type)
+
+	// Wait for output to be broadcast and persisted to scrollback.
+	sessionDir := filepath.Join(dataDir, "cold-scroll")
+	require.Eventually(t, func() bool {
+		info, err := os.Stat(filepath.Join(sessionDir, "scrollback.bin"))
+		return err == nil && info.Size() > 0
+	}, 3*time.Second, 50*time.Millisecond, "scrollback.bin should have data")
 }

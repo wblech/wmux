@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/wblech/wmux/internal/platform/event"
+	"github.com/wblech/wmux/internal/platform/history"
 	"github.com/wblech/wmux/internal/platform/protocol"
 )
 
@@ -89,6 +91,12 @@ type SessionManager interface {
 	LastActivity(id string) (time.Time, error)
 	// Snapshot returns the current terminal screen state for the session.
 	Snapshot(id string) (SnapshotData, error)
+	// MetaSet sets a metadata key-value pair on a session.
+	MetaSet(id, key, value string) error
+	// MetaGet returns a metadata value for a session.
+	MetaGet(id, key string) (string, error)
+	// MetaGetAll returns all metadata for a session.
+	MetaGetAll(id string) (map[string]string, error)
 	// OnExit registers a callback invoked when a session exits.
 	OnExit(fn func(id string, exitCode int))
 }
@@ -129,10 +137,12 @@ type Daemon struct {
 	pidFilePath   string
 	dataDir       string
 	cancelFunc    context.CancelFunc
-	attachments   map[string]map[string]struct{} // session_id -> set of client_ids
-	clientSession map[string]string              // client_id -> session_id
-	eventBus      EventBus                       // may be nil
-	startedAt     time.Time
+	attachments        map[string]map[string]struct{} // session_id -> set of client_ids
+	clientSession      map[string]string              // client_id -> session_id
+	eventBus           EventBus                       // may be nil
+	startedAt          time.Time
+	coldRestore        bool
+	scrollbackWriters  map[string]*history.Writer // session_id -> writer (cold restore only)
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -147,10 +157,12 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		pidFilePath:   "",
 		dataDir:       "",
 		cancelFunc:    nil,
-		attachments:   make(map[string]map[string]struct{}),
-		clientSession: make(map[string]string),
-		eventBus:      nil,
-		startedAt:     time.Time{},
+		attachments:       make(map[string]map[string]struct{}),
+		clientSession:     make(map[string]string),
+		eventBus:          nil,
+		startedAt:         time.Time{},
+		coldRestore:       false,
+		scrollbackWriters: make(map[string]*history.Writer),
 	}
 
 	for _, o := range opts {
@@ -190,6 +202,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 	d.mu.Unlock()
 
 	d.sessionSvc.OnExit(func(id string, exitCode int) {
+		d.persistSessionExit(id, exitCode)
 		d.publishEvent(event.Event{
 			Type:      event.SessionExited,
 			SessionID: id,
@@ -283,6 +296,12 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleSubscribe(c, frame)
 	case protocol.MsgStatus:
 		d.handleStatus(c)
+	case protocol.MsgMetaSet:
+		d.handleMetaSet(c, frame)
+	case protocol.MsgMetaGet:
+		d.handleMetaGet(c, frame)
+	case protocol.MsgEnvForward:
+		d.handleEnvForward(c, frame)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -308,6 +327,8 @@ func (d *Daemon) handleCreate(c ConnectedClient, frame protocol.Frame) {
 		_ = c.Control().WriteFrame(errorFrame(err.Error()))
 		return
 	}
+
+	d.persistSessionCreate(req.ID, req)
 
 	_ = c.Control().WriteFrame(okFrame(sessionInfoToResponse(info)))
 
@@ -565,6 +586,9 @@ func (d *Daemon) flushOutput() {
 			continue
 		}
 
+		d.scanOSC(sessID, data)
+		d.persistOutput(sessID, data)
+
 		payload := EncodeDataPayload(sessID, data)
 		frame := protocol.Frame{
 			Version: protocol.ProtocolVersion,
@@ -639,6 +663,166 @@ func (d *Daemon) handleSubscribe(c ConnectedClient, frame protocol.Frame) {
 			}
 		}
 	}()
+}
+
+// scanOSC inspects output data for OSC sequences and emits events / updates metadata.
+func (d *Daemon) scanOSC(sessID string, data []byte) {
+	results := ParseOSC(data)
+	for _, osc := range results {
+		switch osc.Type {
+		case OSCTypeCwd:
+			_ = d.sessionSvc.MetaSet(sessID, "cwd", osc.Value)
+			d.publishEvent(event.Event{
+				Type:      event.CwdChanged,
+				SessionID: sessID,
+				Payload:   map[string]any{"cwd": osc.Value},
+			})
+		case OSCTypeNotification:
+			d.publishEvent(event.Event{
+				Type:      event.Notification,
+				SessionID: sessID,
+				Payload:   map[string]any{"body": osc.Value},
+			})
+		}
+	}
+}
+
+// handleMetaSet processes a MsgMetaSet frame.
+func (d *Daemon) handleMetaSet(c ConnectedClient, frame protocol.Frame) {
+	var req MetaSetRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid meta set request"))
+		return
+	}
+	if err := d.sessionSvc.MetaSet(req.SessionID, req.Key, req.Value); err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+	_ = c.Control().WriteFrame(okFrame(nil))
+}
+
+// handleMetaGet processes a MsgMetaGet frame.
+func (d *Daemon) handleMetaGet(c ConnectedClient, frame protocol.Frame) {
+	var req MetaGetRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid meta get request"))
+		return
+	}
+	if req.Key == "" {
+		meta, err := d.sessionSvc.MetaGetAll(req.SessionID)
+		if err != nil {
+			_ = c.Control().WriteFrame(errorFrame(err.Error()))
+			return
+		}
+		_ = c.Control().WriteFrame(okFrame(MetaGetResponse{Value: "", Metadata: meta}))
+		return
+	}
+	val, err := d.sessionSvc.MetaGet(req.SessionID, req.Key)
+	if err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+	_ = c.Control().WriteFrame(okFrame(MetaGetResponse{Value: val, Metadata: nil}))
+}
+
+// handleEnvForward processes a MsgEnvForward frame.
+func (d *Daemon) handleEnvForward(c ConnectedClient, frame protocol.Frame) {
+	var req EnvForwardRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid env forward request"))
+		return
+	}
+
+	if d.dataDir == "" {
+		_ = c.Control().WriteFrame(okFrame(nil))
+		return
+	}
+
+	sessionDir := filepath.Join(d.dataDir, "sessions", req.SessionID)
+	_ = os.MkdirAll(sessionDir, 0755) //nolint:gosec
+
+	nonPathEnv := make(map[string]string)
+	for k, v := range req.Env {
+		if _, err := os.Stat(v); err == nil {
+			_ = ForwardEnv(sessionDir, k, v)
+		} else {
+			nonPathEnv[k] = v
+		}
+	}
+	if len(nonPathEnv) > 0 {
+		_ = WriteEnvFile(sessionDir, nonPathEnv)
+	}
+
+	_ = c.Control().WriteFrame(okFrame(nil))
+}
+
+// persistSessionCreate writes initial metadata and creates a scrollback writer
+// when cold restore is enabled.
+func (d *Daemon) persistSessionCreate(sessionID string, req CreateRequest) {
+	if !d.coldRestore || d.dataDir == "" {
+		return
+	}
+
+	sessionDir, err := history.EnsureSessionDir(d.dataDir, sessionID)
+	if err != nil {
+		return
+	}
+
+	meta := history.Metadata{
+		SessionID: sessionID,
+		Shell:     req.Shell,
+		Cwd:       req.Cwd,
+		Cols:      req.Cols,
+		Rows:      req.Rows,
+		StartedAt: time.Now(),
+	}
+
+	if err := history.WriteMetadata(sessionDir, meta); err != nil {
+		return
+	}
+
+	w, err := history.NewWriter(filepath.Join(sessionDir, "scrollback.bin"), 0)
+	if err != nil {
+		return
+	}
+
+	d.mu.Lock()
+	d.scrollbackWriters[sessionID] = w
+	d.mu.Unlock()
+}
+
+// persistSessionExit updates metadata with exit info and closes the scrollback
+// writer when cold restore is enabled.
+func (d *Daemon) persistSessionExit(sessionID string, exitCode int) {
+	if !d.coldRestore || d.dataDir == "" {
+		return
+	}
+
+	d.mu.Lock()
+	w, ok := d.scrollbackWriters[sessionID]
+	if ok {
+		delete(d.scrollbackWriters, sessionID)
+	}
+	d.mu.Unlock()
+
+	if w != nil {
+		_ = w.Close()
+	}
+
+	sessionDir := filepath.Join(d.dataDir, sessionID)
+	_ = history.UpdateMetadataExit(sessionDir, time.Now(), exitCode)
+}
+
+// persistOutput writes output data to the scrollback writer for the given
+// session when cold restore is enabled.
+func (d *Daemon) persistOutput(sessionID string, data []byte) {
+	d.mu.RLock()
+	w := d.scrollbackWriters[sessionID]
+	d.mu.RUnlock()
+
+	if w != nil {
+		_, _ = w.Write(data)
+	}
 }
 
 // okFrame builds a MsgOK frame with an optional JSON payload.
