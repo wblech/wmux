@@ -34,6 +34,7 @@ func TestLoad_DefaultValues(t *testing.T) {
 	assert.Equal(t, "0", cfg.History.MaxPerSession)
 	assert.Equal(t, "0", cfg.History.MaxTotal)
 	assert.False(t, cfg.History.Recording)
+	assert.False(t, cfg.History.ColdRestore)
 
 	// backpressure
 	assert.Equal(t, "1MB", cfg.Backpressure.HighWatermark)
@@ -81,6 +82,7 @@ backend = "tmux"
 max_per_session = "1000"
 max_total = "5000"
 recording = true
+cold_restore = true
 
 [backpressure]
 high_watermark = "2MB"
@@ -125,6 +127,7 @@ strategy = "follower"
 	assert.Equal(t, "1000", cfg.History.MaxPerSession)
 	assert.Equal(t, "5000", cfg.History.MaxTotal)
 	assert.True(t, cfg.History.Recording)
+	assert.True(t, cfg.History.ColdRestore)
 
 	assert.Equal(t, "2MB", cfg.Backpressure.HighWatermark)
 	assert.Equal(t, "512KB", cfg.Backpressure.LowWatermark)
@@ -166,6 +169,24 @@ func TestDefaults_EmulatorXterm(t *testing.T) {
 	cfg := defaults()
 	assert.Equal(t, "none", cfg.Emulator.Backend)
 	assert.Empty(t, cfg.Emulator.Xterm.Bin)
+}
+
+func TestLoad_ColdRestore(t *testing.T) {
+	content := `
+[history]
+cold_restore = true
+`
+	path := filepath.Join(t.TempDir(), "wmux.toml")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
+
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	assert.True(t, cfg.History.ColdRestore)
+}
+
+func TestDefaults_ColdRestoreFalse(t *testing.T) {
+	cfg := defaults()
+	assert.False(t, cfg.History.ColdRestore)
 }
 
 func TestLoad_FileNotFound(t *testing.T) {

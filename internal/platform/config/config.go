@@ -40,6 +40,7 @@ type HistoryConfig struct {
 	MaxPerSession string `koanf:"max_per_session"`
 	MaxTotal      string `koanf:"max_total"`
 	Recording     bool   `koanf:"recording"`
+	ColdRestore   bool   `koanf:"cold_restore"`
 }
 
 // BackpressureConfig holds backpressure flow control settings.
@@ -109,6 +110,7 @@ func defaults() *Config {
 		},
 		Emulator: EmulatorConfig{
 			Backend: "none",
+			Xterm:   XtermEmulatorConfig{Bin: ""},
 		},
 		History: HistoryConfig{
 			MaxPerSession: "0",
