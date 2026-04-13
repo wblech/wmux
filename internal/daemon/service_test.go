@@ -1657,6 +1657,8 @@ func TestDaemon_ColdRestore_MaxScrollbackSize(t *testing.T) {
 		Args:  nil,
 		Cols:  80,
 		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
 	})
 	require.Equal(t, protocol.MsgOK, createResp.Type)
 

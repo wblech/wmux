@@ -67,6 +67,6 @@ func TestClient_ForwardEnv_Error(t *testing.T) {
 	defer c.Close() //nolint:errcheck
 
 	err = c.ForwardEnv("no-such", map[string]string{"K": "V"})
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "session not found")
 }
