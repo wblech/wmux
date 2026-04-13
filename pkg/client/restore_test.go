@@ -23,6 +23,8 @@ func TestLoadSessionHistory_Success(t *testing.T) {
 		Cols:      80,
 		Rows:      24,
 		StartedAt: time.Now().Add(-time.Hour),
+		EndedAt:   nil,
+		ExitCode:  nil,
 	}
 	require.NoError(t, history.WriteMetadata(sessionDir, meta))
 
@@ -51,6 +53,8 @@ func TestLoadSessionHistory_NoScrollback(t *testing.T) {
 		Cols:      120,
 		Rows:      40,
 		StartedAt: time.Now().Add(-time.Hour),
+		EndedAt:   nil,
+		ExitCode:  nil,
 	}
 	require.NoError(t, history.WriteMetadata(sessionDir, meta))
 
@@ -63,7 +67,7 @@ func TestLoadSessionHistory_NoScrollback(t *testing.T) {
 func TestLoadSessionHistory_NotFound(t *testing.T) {
 	dataDir := t.TempDir()
 	_, err := LoadSessionHistory(dataDir, "nonexistent")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrColdRestoreNotAvailable)
 }
 
@@ -87,7 +91,7 @@ func TestLoadSessionHistory_CleanExit(t *testing.T) {
 	require.NoError(t, history.WriteMetadata(sessionDir, meta))
 
 	_, err := LoadSessionHistory(dataDir, "test-session")
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrColdRestoreNotAvailable)
 }
 

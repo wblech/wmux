@@ -130,19 +130,19 @@ type TransportServer interface {
 // Daemon wires a TransportServer to a SessionManager, routes control
 // messages, and broadcasts session output to attached clients.
 type Daemon struct {
-	mu            sync.RWMutex
-	server        TransportServer
-	sessionSvc    SessionManager
-	version       string
-	pidFilePath   string
-	dataDir       string
-	cancelFunc    context.CancelFunc
-	attachments        map[string]map[string]struct{} // session_id -> set of client_ids
-	clientSession      map[string]string              // client_id -> session_id
-	eventBus           EventBus                       // may be nil
-	startedAt          time.Time
-	coldRestore        bool
-	scrollbackWriters  map[string]*history.Writer // session_id -> writer (cold restore only)
+	mu                sync.RWMutex
+	server            TransportServer
+	sessionSvc        SessionManager
+	version           string
+	pidFilePath       string
+	dataDir           string
+	cancelFunc        context.CancelFunc
+	attachments       map[string]map[string]struct{} // session_id -> set of client_ids
+	clientSession     map[string]string              // client_id -> session_id
+	eventBus          EventBus                       // may be nil
+	startedAt         time.Time
+	coldRestore       bool
+	scrollbackWriters map[string]*history.Writer // session_id -> writer (cold restore only)
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -150,13 +150,13 @@ type Daemon struct {
 // the PID file path, version, and data directory.
 func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option) *Daemon {
 	d := &Daemon{
-		mu:            sync.RWMutex{},
-		server:        server,
-		sessionSvc:    sessionSvc,
-		version:       "",
-		pidFilePath:   "",
-		dataDir:       "",
-		cancelFunc:    nil,
+		mu:                sync.RWMutex{},
+		server:            server,
+		sessionSvc:        sessionSvc,
+		version:           "",
+		pidFilePath:       "",
+		dataDir:           "",
+		cancelFunc:        nil,
 		attachments:       make(map[string]map[string]struct{}),
 		clientSession:     make(map[string]string),
 		eventBus:          nil,
@@ -775,6 +775,8 @@ func (d *Daemon) persistSessionCreate(sessionID string, req CreateRequest) {
 		Cols:      req.Cols,
 		Rows:      req.Rows,
 		StartedAt: time.Now(),
+		EndedAt:   nil,
+		ExitCode:  nil,
 	}
 
 	if err := history.WriteMetadata(sessionDir, meta); err != nil {

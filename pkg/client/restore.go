@@ -20,7 +20,7 @@ func LoadSessionHistory(dataDir, sessionID string) (SessionHistory, error) {
 
 	meta, err := history.ReadMetadata(sessionDir)
 	if err != nil {
-		return SessionHistory{}, fmt.Errorf("%w: %s", ErrColdRestoreNotAvailable, err)
+		return SessionHistory{}, fmt.Errorf("%w: %w", ErrColdRestoreNotAvailable, err)
 	}
 
 	// Clean exit = not restorable.

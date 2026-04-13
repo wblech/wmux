@@ -116,6 +116,7 @@ func defaults() *Config {
 			MaxPerSession: "0",
 			MaxTotal:      "0",
 			Recording:     false,
+			ColdRestore:   false,
 		},
 		Backpressure: BackpressureConfig{
 			HighWatermark: "1MB",

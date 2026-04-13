@@ -1480,8 +1480,11 @@ func TestDaemon_ColdRestore_Disabled_NoHistoryWritten(t *testing.T) {
 	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 		ID:    "no-history",
 		Shell: "/bin/sh",
+		Args:  nil,
 		Cols:  80,
 		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
 	})
 	require.Equal(t, protocol.MsgOK, resp.Type)
 
@@ -1513,8 +1516,11 @@ func TestDaemon_ColdRestore_Enabled_WritesMetadata(t *testing.T) {
 	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 		ID:    "cold-meta",
 		Shell: "/bin/sh",
+		Args:  nil,
 		Cols:  80,
 		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
 	})
 	require.Equal(t, protocol.MsgOK, resp.Type)
 
@@ -1542,17 +1548,21 @@ func TestDaemon_ColdRestore_Enabled_ExitUpdatesMetadata(t *testing.T) {
 	ctrl, _ := dialControl(t, sock, token)
 	defer ctrl.Close() //nolint:errcheck
 
-	// Create a session that exits immediately.
 	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 		ID:    "cold-exit",
 		Shell: "/bin/sh",
-		Args:  []string{"-c", "exit 0"},
+		Args:  nil,
 		Cols:  80,
 		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
 	})
 	require.Equal(t, protocol.MsgOK, resp.Type)
 
-	// Wait for SessionExited event (process exits immediately).
+	// Kill the session and wait for the SessionExited event.
+	killResp := sendControl(t, ctrl, protocol.MsgKill, SessionIDRequest{SessionID: "cold-exit"})
+	require.Equal(t, protocol.MsgOK, killResp.Type)
+
 	sessionDir := filepath.Join(dataDir, "cold-exit")
 	require.Eventually(t, func() bool {
 		for _, evt := range eb.Events() {
@@ -1589,8 +1599,11 @@ func TestDaemon_ColdRestore_Enabled_ScrollbackPersisted(t *testing.T) {
 	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 		ID:    "cold-scroll",
 		Shell: "/bin/sh",
+		Args:  nil,
 		Cols:  80,
 		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
 	})
 	require.Equal(t, protocol.MsgOK, resp.Type)
 
