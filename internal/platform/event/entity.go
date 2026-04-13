@@ -6,7 +6,7 @@ import "errors"
 // Type identifies the kind of event.
 type Type int
 
-// Phase 1 lifecycle event types.
+// Lifecycle event types.
 const (
 	_ Type = iota
 	// SessionCreated is emitted when a new session is spawned.
@@ -17,6 +17,18 @@ const (
 	SessionDetached
 	// SessionExited is emitted when a session's process exits.
 	SessionExited
+	// SessionIdle is emitted when a session has no activity for a configured period.
+	SessionIdle
+	// SessionKilled is emitted when a session is explicitly killed.
+	SessionKilled
+	// Resize is emitted when a session's terminal dimensions change.
+	Resize
+	// CwdChanged is emitted when a session's working directory changes (via OSC 7).
+	CwdChanged
+	// Notification is emitted when an OSC 9/99/777 notification is received.
+	Notification
+	// OutputFlood is emitted when a session's output rate exceeds a threshold.
+	OutputFlood
 )
 
 // String returns the dot-notation name of the event type.
@@ -30,6 +42,18 @@ func (t Type) String() string {
 		return "session.detached"
 	case SessionExited:
 		return "session.exited"
+	case SessionIdle:
+		return "session.idle"
+	case SessionKilled:
+		return "session.killed"
+	case Resize:
+		return "resize"
+	case CwdChanged:
+		return "cwd.changed"
+	case Notification:
+		return "notification"
+	case OutputFlood:
+		return "output.flood"
 	default:
 		return "unknown"
 	}

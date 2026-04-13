@@ -23,6 +23,25 @@ func TestType_String(t *testing.T) {
 	}
 }
 
+func TestType_String_Phase2(t *testing.T) {
+	tests := []struct {
+		et   Type
+		want string
+	}{
+		{SessionIdle, "session.idle"},
+		{SessionKilled, "session.killed"},
+		{Resize, "resize"},
+		{CwdChanged, "cwd.changed"},
+		{Notification, "notification"},
+		{OutputFlood, "output.flood"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.et.String())
+		})
+	}
+}
+
 func TestEvent_Fields(t *testing.T) {
 	e := Event{
 		Type:      SessionCreated,
