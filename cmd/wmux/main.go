@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +56,8 @@ func main() {
 		exitCode = cmdEvents(args)
 	case "exec":
 		exitCode = cmdExec(args)
+	case "wait":
+		exitCode = cmdWait(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -114,6 +117,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  info      Show session information")
 	fmt.Fprintln(os.Stderr, "  status    Show daemon status")
 	fmt.Fprintln(os.Stderr, "  exec      Send input to a session without attaching")
+	fmt.Fprintln(os.Stderr, "  wait      Wait for a session condition (exit, idle, match)")
 	fmt.Fprintln(os.Stderr, "  events    Stream session events")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags:")
@@ -661,6 +665,134 @@ func cmdEvents(args []string) int {
 			}
 		}
 	}
+}
+
+func cmdWait(args []string) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: wmux wait <session-id> exit [--timeout <ms>]")
+		fmt.Fprintln(os.Stderr, "       wmux wait <session-id> idle <idle-ms> [--timeout <ms>]")
+		fmt.Fprintln(os.Stderr, "       wmux wait <session-id> match <pattern> [--timeout <ms>]")
+		return 1
+	}
+
+	sessionID := args[0]
+	mode := args[1]
+
+	var (
+		timeout int64
+		idleFor int64
+		pattern string
+	)
+
+	remaining := args[2:]
+
+	switch mode {
+	case "exit":
+		// No extra positional args.
+	case "idle":
+		if len(remaining) < 1 {
+			fmt.Fprintln(os.Stderr, "error: idle mode requires <idle-ms> argument")
+			return 1
+		}
+		val, err := strconv.ParseInt(remaining[0], 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: invalid idle-ms: %s\n", remaining[0])
+			return 1
+		}
+		idleFor = val
+		remaining = remaining[1:]
+	case "match":
+		if len(remaining) < 1 {
+			fmt.Fprintln(os.Stderr, "error: match mode requires <pattern> argument")
+			return 1
+		}
+		pattern = remaining[0]
+		remaining = remaining[1:]
+	default:
+		fmt.Fprintf(os.Stderr, "error: unknown wait mode: %s\n", mode)
+		return 1
+	}
+
+	// Parse optional --timeout flag.
+	for i := 0; i < len(remaining); i++ {
+		if remaining[i] == "--timeout" && i+1 < len(remaining) {
+			val, err := strconv.ParseInt(remaining[i+1], 10, 64)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: invalid timeout: %s\n", remaining[i+1])
+				return 1
+			}
+			timeout = val
+			i++
+		}
+	}
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	type waitReq struct {
+		SessionID string `json:"session_id"`
+		Mode      string `json:"mode"`
+		Timeout   int64  `json:"timeout"`
+		IdleFor   int64  `json:"idle_for,omitempty"`
+		Pattern   string `json:"pattern,omitempty"`
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgWait, waitReq{
+		SessionID: sessionID,
+		Mode:      mode,
+		Timeout:   timeout,
+		IdleFor:   idleFor,
+		Pattern:   pattern,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	type waitResp struct {
+		SessionID string `json:"session_id"`
+		Mode      string `json:"mode"`
+		ExitCode  *int   `json:"exit_code"`
+		Matched   bool   `json:"matched"`
+		TimedOut  bool   `json:"timed_out"`
+	}
+
+	var result waitResp
+	if err := json.Unmarshal(resp.Payload, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if result.TimedOut {
+		fmt.Fprintf(os.Stderr, "wait: timed out (%s mode)\n", result.Mode)
+		return 2
+	}
+
+	switch result.Mode {
+	case "exit":
+		if result.ExitCode != nil {
+			fmt.Printf("session %s exited with code %d\n", result.SessionID, *result.ExitCode)
+		}
+	case "idle":
+		fmt.Printf("session %s idle\n", result.SessionID)
+	case "match":
+		if result.Matched {
+			fmt.Printf("session %s matched\n", result.SessionID)
+		} else if result.ExitCode != nil {
+			fmt.Printf("session %s exited (code %d) before match\n", result.SessionID, *result.ExitCode)
+			return 1
+		}
+	}
+
+	return 0
 }
 
 func cmdExec(args []string) int {
