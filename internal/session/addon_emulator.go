@@ -27,6 +27,7 @@ type AddonEmulator struct {
 // If process is nil, all operations are no-ops (like NoneEmulator).
 func NewAddonEmulatorWithProcess(proc AddonProcess, sessionID string) *AddonEmulator {
 	em := &AddonEmulator{
+		mu:        sync.Mutex{},
 		process:   proc,
 		sessionID: sessionID,
 	}
@@ -47,15 +48,15 @@ func (a *AddonEmulator) Process(data []byte) {
 // Snapshot requests the current terminal state from the addon.
 func (a *AddonEmulator) Snapshot() Snapshot {
 	if a.process == nil {
-		return Snapshot{}
+		return Snapshot{Scrollback: nil, Viewport: nil}
 	}
 	resp, err := a.sendRequestWithResponse(AddonMethodSnapshot, nil)
 	if err != nil {
-		return Snapshot{}
+		return Snapshot{Scrollback: nil, Viewport: nil}
 	}
 	scrollback, viewport, err := DecodeSnapshotPayload(resp)
 	if err != nil {
-		return Snapshot{}
+		return Snapshot{Scrollback: nil, Viewport: nil}
 	}
 	return Snapshot{Scrollback: scrollback, Viewport: viewport}
 }

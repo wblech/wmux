@@ -78,13 +78,13 @@ type managedSession struct {
 
 // Service manages the lifecycle of terminal sessions.
 type Service struct {
-	mu             sync.RWMutex
-	sessions       map[string]*managedSession
-	spawner        pty.Spawner
-	maxSessions    int
-	onExit         func(id string, exitCode int)
-	spawnSem       chan struct{}
-	addonManager   *AddonManager
+	mu           sync.RWMutex
+	sessions     map[string]*managedSession
+	spawner      pty.Spawner
+	maxSessions  int
+	onExit       func(id string, exitCode int)
+	spawnSem     chan struct{}
+	addonManager *AddonManager
 }
 
 // NewService creates a new Service backed by the given Spawner.

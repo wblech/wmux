@@ -23,6 +23,8 @@ func newMockAddonProcess() *mockAddonProcess {
 	return &mockAddonProcess{
 		stdin:  &bytes.Buffer{},
 		stdout: &bytes.Buffer{},
+		mu:     sync.Mutex{},
+		exited: false,
 	}
 }
 
@@ -65,7 +67,7 @@ func TestAddonEmulator_Process(t *testing.T) {
 	em.Process(data)
 
 	written := mock.stdin.Bytes()
-	require.True(t, len(written) > 4, "expected data in stdin buffer")
+	require.Greater(t, len(written), 4, "expected data in stdin buffer")
 	frameLen := binary.BigEndian.Uint32(written[:4])
 	frame := written[4 : 4+frameLen]
 	assert.Equal(t, byte(AddonMethodProcess), frame[0])
@@ -104,7 +106,7 @@ func TestAddonEmulator_Resize(t *testing.T) {
 	em.Resize(120, 40)
 
 	written := mock.stdin.Bytes()
-	require.True(t, len(written) > 4, "expected data in stdin buffer")
+	require.Greater(t, len(written), 4, "expected data in stdin buffer")
 	frameLen := binary.BigEndian.Uint32(written[:4])
 	frame := written[4 : 4+frameLen]
 	assert.Equal(t, byte(AddonMethodResize), frame[0])
@@ -120,7 +122,7 @@ func TestAddonEmulator_Destroy(t *testing.T) {
 	em.Destroy()
 
 	written := mock.stdin.Bytes()
-	require.True(t, len(written) > 4, "expected data in stdin buffer")
+	require.Greater(t, len(written), 4, "expected data in stdin buffer")
 	frameLen := binary.BigEndian.Uint32(written[:4])
 	frame := written[4 : 4+frameLen]
 	assert.Equal(t, byte(AddonMethodDestroy), frame[0])
@@ -131,7 +133,7 @@ func TestNewAddonEmulator_SendsCreate(t *testing.T) {
 	_ = NewAddonEmulatorWithProcess(mock, "new-sess")
 
 	written := mock.stdin.Bytes()
-	require.True(t, len(written) > 4, "expected Create frame in stdin")
+	require.Greater(t, len(written), 4, "expected Create frame in stdin")
 	frameLen := binary.BigEndian.Uint32(written[:4])
 	frame := written[4 : 4+frameLen]
 	assert.Equal(t, byte(AddonMethodCreate), frame[0])

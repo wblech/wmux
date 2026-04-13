@@ -40,9 +40,9 @@ func TestEncodeAddonRequest_Shutdown(t *testing.T) {
 
 func TestDecodeAddonResponse_OK(t *testing.T) {
 	resp := []byte{
-		0x01,       // method
-		2,          // session_id_len
-		's', '1',   // session_id
+		0x01,     // method
+		2,        // session_id_len
+		's', '1', // session_id
 		0x00,       // status ok
 		0, 0, 0, 0, // payload_len = 0
 	}

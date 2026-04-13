@@ -8,6 +8,7 @@ import (
 // AddonMethod identifies the operation in an addon protocol frame.
 type AddonMethod byte
 
+// Addon protocol method constants.
 const (
 	AddonMethodCreate   AddonMethod = 0x01
 	AddonMethodProcess  AddonMethod = 0x02
@@ -20,11 +21,13 @@ const (
 // AddonStatus indicates success or failure in an addon response.
 type AddonStatus byte
 
+// Addon protocol status constants.
 const (
 	AddonStatusOK    AddonStatus = 0x00
 	AddonStatusError AddonStatus = 0x01
 )
 
+// Sentinel errors for addon protocol operations.
 var (
 	ErrAddonFrameTooShort    = errors.New("addon: frame too short")
 	ErrAddonSnapshotTooShort = errors.New("addon: snapshot payload too short")

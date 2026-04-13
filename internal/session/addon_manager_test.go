@@ -20,7 +20,7 @@ func (m *mockProcessStarter) Start() (AddonProcess, error) {
 }
 
 func TestAddonManager_EmulatorFor_StartsProcess(t *testing.T) {
-	starter := &mockProcessStarter{}
+	starter := &mockProcessStarter{processes: nil}
 	mgr := NewAddonManager(starter)
 
 	em := mgr.EmulatorFor("sess-1", 80, 24)
@@ -29,7 +29,7 @@ func TestAddonManager_EmulatorFor_StartsProcess(t *testing.T) {
 }
 
 func TestAddonManager_EmulatorFor_ReusesSingleProcess(t *testing.T) {
-	starter := &mockProcessStarter{}
+	starter := &mockProcessStarter{processes: nil}
 	mgr := NewAddonManager(starter)
 
 	// Pre-load a second create response for the second EmulatorFor call.
@@ -39,8 +39,8 @@ func TestAddonManager_EmulatorFor_ReusesSingleProcess(t *testing.T) {
 	assert.Len(t, starter.processes, 1) // same process
 }
 
-func TestAddonManager_Shutdown(t *testing.T) {
-	starter := &mockProcessStarter{}
+func TestAddonManager_Shutdown(_ *testing.T) {
+	starter := &mockProcessStarter{processes: nil}
 	mgr := NewAddonManager(starter)
 	_ = mgr.EmulatorFor("sess-1", 80, 24)
 
@@ -48,8 +48,8 @@ func TestAddonManager_Shutdown(t *testing.T) {
 	// Should not panic, process should be nil after shutdown.
 }
 
-func TestAddonManager_Shutdown_NilProcess(t *testing.T) {
-	starter := &mockProcessStarter{}
+func TestAddonManager_Shutdown_NilProcess(_ *testing.T) {
+	starter := &mockProcessStarter{processes: nil}
 	mgr := NewAddonManager(starter)
 
 	// Shutdown without ever starting a process should be safe.
