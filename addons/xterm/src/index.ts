@@ -1,7 +1,21 @@
+/**
+ * wmux xterm addon — headless terminal emulator process.
+ *
+ * Runs as a child process of the wmux daemon, communicating over stdin/stdout
+ * using a binary protocol with length-prefixed frames. Manages N xterm.js
+ * headless instances (one per session) in a single Node.js process.
+ *
+ * Lifecycle: the daemon spawns this process once and reuses it for all sessions.
+ * When the daemon shuts down (or stdin closes), all instances are destroyed.
+ */
+
 import {
+  type AddonRequest,
   decodeRequest,
   encodeResponse,
   readFrame,
+  FRAME_LENGTH_PREFIX_SIZE,
+  EMPTY_PAYLOAD,
   METHOD_CREATE,
   METHOD_PROCESS,
   METHOD_SNAPSHOT,
@@ -13,157 +27,159 @@ import {
 } from "./protocol.js";
 import { InstanceManager } from "./manager.js";
 
-const manager = new InstanceManager();
+// ---------------------------------------------------------------------------
+// Input buffering
+// ---------------------------------------------------------------------------
 
-// Chunked input buffer: stores incoming pieces without copying on every chunk.
-const chunks: Buffer[] = [];
-let totalLen = 0;
+/**
+ * Incoming data arrives in arbitrarily-sized chunks. We accumulate chunks
+ * without copying until we need to parse, then concatenate once per batch.
+ */
+const inputChunks: Buffer[] = [];
+let inputLength = 0;
 
-function flushChunks(): Buffer {
-  if (chunks.length === 1) {
-    const buf = chunks[0];
-    chunks.length = 0;
-    totalLen = 0;
+function flushInputChunks(): Buffer {
+  if (inputChunks.length === 1) {
+    const buf = inputChunks[0];
+    inputChunks.length = 0;
+    inputLength = 0;
     return buf;
   }
-  const buf = Buffer.concat(chunks, totalLen);
-  chunks.length = 0;
-  totalLen = 0;
+  const buf = Buffer.concat(inputChunks, inputLength);
+  inputChunks.length = 0;
+  inputLength = 0;
   return buf;
 }
 
-function parseJSON(buf: Buffer): Record<string, unknown> | null {
+// ---------------------------------------------------------------------------
+// Request handling
+// ---------------------------------------------------------------------------
+
+const manager = new InstanceManager();
+
+interface TerminalParams {
+  cols: number;
+  rows: number;
+}
+
+function parseTerminalParams(payload: Buffer): TerminalParams | null {
   try {
-    return JSON.parse(buf.toString()) as Record<string, unknown>;
+    const parsed = JSON.parse(payload.toString()) as TerminalParams;
+    if (typeof parsed.cols !== "number" || typeof parsed.rows !== "number") {
+      return null;
+    }
+    return parsed;
   } catch {
     return null;
   }
 }
 
+function okResponse(req: AddonRequest, payload: Buffer = EMPTY_PAYLOAD): Buffer {
+  return encodeResponse({
+    method: req.method,
+    sessionId: req.sessionId,
+    status: STATUS_OK,
+    payload,
+  });
+}
+
+function errorResponse(req: AddonRequest, message: string): Buffer {
+  return encodeResponse({
+    method: req.method,
+    sessionId: req.sessionId,
+    status: STATUS_ERROR,
+    payload: Buffer.from(message),
+  });
+}
+
+/**
+ * Process a single decoded request frame and return the response to send,
+ * or null for fire-and-forget methods (PROCESS).
+ */
 function handleRequest(frame: Buffer): Buffer | null {
   const req = decodeRequest(frame);
 
   switch (req.method) {
     case METHOD_CREATE: {
-      const params = parseJSON(req.payload);
+      const params = parseTerminalParams(req.payload);
       if (!params) {
-        return encodeResponse({
-          method: req.method,
-          sessionId: req.sessionId,
-          status: STATUS_ERROR,
-          payload: Buffer.from("invalid JSON payload"),
-        });
+        return errorResponse(req, "invalid JSON payload");
       }
-      manager.create(
-        req.sessionId,
-        params.cols as number,
-        params.rows as number
-      );
-      return encodeResponse({
-        method: req.method,
-        sessionId: req.sessionId,
-        status: STATUS_OK,
-        payload: Buffer.alloc(0),
-      });
+      manager.create(req.sessionId, params.cols, params.rows);
+      return okResponse(req);
     }
 
     case METHOD_PROCESS: {
       manager.process(req.sessionId, req.payload);
-      return null; // fire-and-forget, no response
+      return null; // fire-and-forget — no response expected
     }
 
     case METHOD_SNAPSHOT: {
-      const snap = manager.snapshot(req.sessionId);
-      return encodeResponse({
-        method: req.method,
-        sessionId: req.sessionId,
-        status: STATUS_OK,
-        payload: snap,
-      });
+      const snapshot = manager.snapshot(req.sessionId);
+      return okResponse(req, snapshot);
     }
 
     case METHOD_RESIZE: {
-      const params = parseJSON(req.payload);
+      const params = parseTerminalParams(req.payload);
       if (!params) {
-        return encodeResponse({
-          method: req.method,
-          sessionId: req.sessionId,
-          status: STATUS_ERROR,
-          payload: Buffer.from("invalid JSON payload"),
-        });
+        return errorResponse(req, "invalid JSON payload");
       }
-      manager.resize(
-        req.sessionId,
-        params.cols as number,
-        params.rows as number
-      );
-      return encodeResponse({
-        method: req.method,
-        sessionId: req.sessionId,
-        status: STATUS_OK,
-        payload: Buffer.alloc(0),
-      });
+      manager.resize(req.sessionId, params.cols, params.rows);
+      return okResponse(req);
     }
 
     case METHOD_DESTROY: {
       manager.destroy(req.sessionId);
-      return encodeResponse({
-        method: req.method,
-        sessionId: req.sessionId,
-        status: STATUS_OK,
-        payload: Buffer.alloc(0),
-      });
+      return okResponse(req);
     }
 
     case METHOD_SHUTDOWN: {
       manager.destroyAll();
-      const resp = encodeResponse({
-        method: req.method,
-        sessionId: req.sessionId,
-        status: STATUS_OK,
-        payload: Buffer.alloc(0),
-      });
-      writeResponse(resp);
+      writeFrame(okResponse(req));
       process.exit(0);
     }
 
     default: {
-      return encodeResponse({
-        method: req.method,
-        sessionId: req.sessionId,
-        status: STATUS_ERROR,
-        payload: Buffer.from("unknown method"),
-      });
+      return errorResponse(req, "unknown method");
     }
   }
 }
 
-function writeResponse(resp: Buffer): void {
-  const out = Buffer.alloc(4 + resp.length);
-  out.writeUInt32BE(resp.length, 0);
-  resp.copy(out, 4);
-  process.stdout.write(out);
+// ---------------------------------------------------------------------------
+// Wire I/O
+// ---------------------------------------------------------------------------
+
+/** Write a length-prefixed response frame to stdout. */
+function writeFrame(responseBody: Buffer): void {
+  const frame = Buffer.alloc(FRAME_LENGTH_PREFIX_SIZE + responseBody.length);
+  frame.writeUInt32BE(responseBody.length, 0);
+  responseBody.copy(frame, FRAME_LENGTH_PREFIX_SIZE);
+  process.stdout.write(frame);
 }
+
+// ---------------------------------------------------------------------------
+// Main loop
+// ---------------------------------------------------------------------------
 
 process.stdin.on("data", (chunk: Buffer) => {
-  chunks.push(chunk);
-  totalLen += chunk.length;
+  inputChunks.push(chunk);
+  inputLength += chunk.length;
 
-  let inputBuffer = flushChunks();
-  let result: ReturnType<typeof readFrame>;
+  let pending = flushInputChunks();
+  let parsed: ReturnType<typeof readFrame>;
 
-  while ((result = readFrame(inputBuffer, 0)) !== null) {
-    const resp = handleRequest(result.frame);
-    if (resp !== null) {
-      writeResponse(resp);
+  while ((parsed = readFrame(pending, 0)) !== null) {
+    const response = handleRequest(parsed.frame);
+    if (response !== null) {
+      writeFrame(response);
     }
-    inputBuffer = inputBuffer.subarray(result.newOffset);
+    pending = pending.subarray(parsed.newOffset);
   }
 
-  // Put remainder back if there's leftover data
-  if (inputBuffer.length > 0) {
-    chunks.push(inputBuffer);
-    totalLen = inputBuffer.length;
+  // Stash any incomplete frame data for the next chunk.
+  if (pending.length > 0) {
+    inputChunks.push(pending);
+    inputLength = pending.length;
   }
 });
 

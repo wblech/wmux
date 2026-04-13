@@ -12,38 +12,50 @@ describe("InstanceManager", () => {
   it("creates and destroys instances", () => {
     mgr.create("s1", 80, 24);
     assert.equal(mgr.size(), 1);
+
     mgr.destroy("s1");
     assert.equal(mgr.size(), 0);
   });
 
-  it("ignores duplicate create", () => {
+  it("ignores duplicate create for the same session ID", () => {
     mgr.create("s1", 80, 24);
-    mgr.create("s1", 120, 40);
+    mgr.create("s1", 120, 40); // should be a no-op
     assert.equal(mgr.size(), 1);
   });
 
-  it("processes data and returns snapshot", () => {
+  it("processes data and produces a non-empty snapshot", () => {
     mgr.create("s1", 80, 24);
     mgr.process("s1", Buffer.from("hello world\r\n"));
-    const snap = mgr.snapshot("s1");
-    assert.ok(snap.length > 0);
+
+    const snapshot = mgr.snapshot("s1");
+    assert.ok(snapshot.length > 0, "snapshot should contain data");
   });
 
-  it("returns empty snapshot for unknown session", () => {
-    const snap = mgr.snapshot("unknown");
-    assert.equal(snap.readUInt32BE(0), 0);
+  it("returns an empty snapshot for an unknown session", () => {
+    const snapshot = mgr.snapshot("nonexistent");
+    // Empty snapshot: [scrollback_len:4(=0)] — at least 4 bytes with value 0.
+    assert.equal(snapshot.readUInt32BE(0), 0);
   });
 
-  it("resizes instance", () => {
+  it("resizes an instance without errors", () => {
     mgr.create("s1", 80, 24);
     mgr.resize("s1", 120, 40);
-    // No assertion beyond no-crash
+    // Resize is a side-effect operation; success = no throw.
   });
 
-  it("destroyAll cleans up all instances", () => {
+  it("silently ignores operations on unknown sessions", () => {
+    // None of these should throw.
+    mgr.process("unknown", Buffer.from("data"));
+    mgr.resize("unknown", 80, 24);
+    mgr.destroy("unknown");
+  });
+
+  it("destroyAll cleans up every instance", () => {
     mgr.create("s1", 80, 24);
     mgr.create("s2", 80, 24);
     mgr.create("s3", 80, 24);
+    assert.equal(mgr.size(), 3);
+
     mgr.destroyAll();
     assert.equal(mgr.size(), 0);
   });
