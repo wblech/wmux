@@ -53,6 +53,7 @@ func TestMessageType_String_Phase2(t *testing.T) {
 func TestMessageType_String_Phase3(t *testing.T) {
 	assert.Equal(t, "exec", MsgExec.String())
 	assert.Equal(t, "exec_sync", MsgExecSync.String())
+	assert.Equal(t, "wait", MsgWait.String())
 }
 
 func TestMessageType_String_Unknown(t *testing.T) {

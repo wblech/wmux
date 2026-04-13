@@ -37,6 +37,7 @@ const (
 	MsgEnvForward   MessageType = 0x14
 	MsgExec         MessageType = 0x15
 	MsgExecSync     MessageType = 0x16
+	MsgWait         MessageType = 0x17
 )
 
 // String returns the lowercase name of the message type.
@@ -86,6 +87,8 @@ func (m MessageType) String() string {
 		return "exec"
 	case MsgExecSync:
 		return "exec_sync"
+	case MsgWait:
+		return "wait"
 	default:
 		return "unknown"
 	}
