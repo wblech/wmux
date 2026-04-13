@@ -57,6 +57,22 @@ type AttachResult struct {
 	Snapshot Snapshot
 }
 
+// SessionHistory holds restored session data from disk (cold restore).
+type SessionHistory struct {
+	// Scrollback is the raw PTY output from the previous session.
+	Scrollback []byte
+	// SessionID is the session identifier.
+	SessionID string
+	// Shell is the shell binary path.
+	Shell string
+	// Cwd is the working directory at session creation.
+	Cwd string
+	// Cols is the terminal width at creation.
+	Cols int
+	// Rows is the terminal height at creation.
+	Rows int
+}
+
 // Event represents a daemon event delivered to the client.
 type Event struct {
 	// Type is the event type string (e.g., "session.created").
