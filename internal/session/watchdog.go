@@ -16,8 +16,8 @@ type Watchdog struct {
 	done   chan struct{}
 }
 
-// NewWatchdog creates a Watchdog that checks process liveness at the given interval.
-func NewWatchdog(svc *Service, interval time.Duration) *Watchdog {
+// newWatchdog creates a Watchdog that checks process liveness at the given interval.
+func newWatchdog(svc *Service, interval time.Duration) *Watchdog {
 	return &Watchdog{
 		service:  svc,
 		interval: interval,

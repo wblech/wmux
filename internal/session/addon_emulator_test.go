@@ -58,7 +58,7 @@ func (m *mockAddonProcess) writeResponse(method AddonMethod, sessionID string, s
 
 func TestAddonEmulator_Process(t *testing.T) {
 	mock := newMockAddonProcess()
-	em := NewAddonEmulatorWithProcess(mock, "test-session")
+	em := newAddonEmulatorWithProcess(mock, "test-session")
 
 	// Clear the Create request written by the constructor.
 	mock.stdin.Reset()
@@ -74,7 +74,7 @@ func TestAddonEmulator_Process(t *testing.T) {
 }
 
 func TestAddonEmulator_Snapshot_Nil(t *testing.T) {
-	em := NewAddonEmulatorWithProcess(nil, "test-session")
+	em := newAddonEmulatorWithProcess(nil, "test-session")
 	snap := em.Snapshot()
 	assert.Nil(t, snap.Scrollback)
 	assert.Nil(t, snap.Viewport)
@@ -82,7 +82,7 @@ func TestAddonEmulator_Snapshot_Nil(t *testing.T) {
 
 func TestAddonEmulator_Snapshot_WithResponse(t *testing.T) {
 	mock := newMockAddonProcess()
-	em := NewAddonEmulatorWithProcess(mock, "s1")
+	em := newAddonEmulatorWithProcess(mock, "s1")
 
 	// Prepare the snapshot response that the addon would return.
 	snapshotPayload := EncodeSnapshotPayload([]byte("scroll"), []byte("view"))
@@ -95,7 +95,7 @@ func TestAddonEmulator_Snapshot_WithResponse(t *testing.T) {
 
 func TestAddonEmulator_Resize(t *testing.T) {
 	mock := newMockAddonProcess()
-	em := NewAddonEmulatorWithProcess(mock, "test-session")
+	em := newAddonEmulatorWithProcess(mock, "test-session")
 
 	// Clear the Create request written by the constructor.
 	mock.stdin.Reset()
@@ -114,7 +114,7 @@ func TestAddonEmulator_Resize(t *testing.T) {
 
 func TestAddonEmulator_Destroy(t *testing.T) {
 	mock := newMockAddonProcess()
-	em := NewAddonEmulatorWithProcess(mock, "test-session")
+	em := newAddonEmulatorWithProcess(mock, "test-session")
 
 	// Clear the Create request written by the constructor.
 	mock.stdin.Reset()
@@ -130,7 +130,7 @@ func TestAddonEmulator_Destroy(t *testing.T) {
 
 func TestNewAddonEmulator_SendsCreate(t *testing.T) {
 	mock := newMockAddonProcess()
-	_ = NewAddonEmulatorWithProcess(mock, "new-sess")
+	_ = newAddonEmulatorWithProcess(mock, "new-sess")
 
 	written := mock.stdin.Bytes()
 	require.Greater(t, len(written), 4, "expected Create frame in stdin")
@@ -140,7 +140,7 @@ func TestNewAddonEmulator_SendsCreate(t *testing.T) {
 }
 
 func TestAddonEmulator_NilProcess_NoOps(t *testing.T) {
-	em := NewAddonEmulatorWithProcess(nil, "test")
+	em := newAddonEmulatorWithProcess(nil, "test")
 
 	// All operations should be safe no-ops.
 	em.Process([]byte("data"))

@@ -14,7 +14,7 @@ func TestBatcher_FlushesOnInterval(t *testing.T) {
 		flushed []byte
 	)
 
-	b := NewBatcher(50*time.Millisecond, func(data []byte) {
+	b := newBatcher(50*time.Millisecond, func(data []byte) {
 		mu.Lock()
 		defer mu.Unlock()
 		cp := make([]byte, len(data))
@@ -41,7 +41,7 @@ func TestBatcher_FlushesOnInterval(t *testing.T) {
 func TestBatcher_NoFlushWhenEmpty(t *testing.T) {
 	flushed := false
 
-	b := NewBatcher(50*time.Millisecond, func(_ []byte) {
+	b := newBatcher(50*time.Millisecond, func(_ []byte) {
 		flushed = true
 	})
 	defer b.Stop()
@@ -57,7 +57,7 @@ func TestBatcher_MultipleBatches(t *testing.T) {
 		batches [][]byte
 	)
 
-	b := NewBatcher(50*time.Millisecond, func(data []byte) {
+	b := newBatcher(50*time.Millisecond, func(data []byte) {
 		cp := make([]byte, len(data))
 		copy(cp, data)
 		mu.Lock()
@@ -91,7 +91,7 @@ func TestBatcher_MultipleBatches(t *testing.T) {
 }
 
 func TestBatcher_StopPreventsFlush(_ *testing.T) {
-	b := NewBatcher(50*time.Millisecond, func(_ []byte) {
+	b := newBatcher(50*time.Millisecond, func(_ []byte) {
 		// If this is called after Stop, the test body may have already exited;
 		// the test simply must not panic.
 	})
@@ -110,7 +110,7 @@ func TestBatcher_FlushNow(t *testing.T) {
 	)
 
 	// Use a 1-second interval so the timer won't fire during the test.
-	b := NewBatcher(time.Second, func(data []byte) {
+	b := newBatcher(time.Second, func(data []byte) {
 		cp := make([]byte, len(data))
 		copy(cp, data)
 		mu.Lock()
@@ -137,7 +137,7 @@ func TestBatcher_FlushNow(t *testing.T) {
 
 func TestBatcher_Len(t *testing.T) {
 	// Use a 1-second interval so the timer won't interfere.
-	b := NewBatcher(time.Second, func(_ []byte) {})
+	b := newBatcher(time.Second, func(_ []byte) {})
 	defer b.Stop()
 
 	assert.Equal(t, 0, b.Len())
@@ -159,7 +159,7 @@ func TestNewBatcher_RequiresPositiveInterval(t *testing.T) {
 	// A zero interval should be clamped to minBatchInterval and not panic.
 	flushed := make(chan struct{}, 1)
 
-	b := NewBatcher(0, func(_ []byte) {
+	b := newBatcher(0, func(_ []byte) {
 		select {
 		case flushed <- struct{}{}:
 		default:

@@ -13,9 +13,9 @@ type Reaper struct {
 	done   chan struct{}
 }
 
-// NewReaper creates a Reaper that checks the service every checkInterval
+// newReaper creates a Reaper that checks the service every checkInterval
 // for sessions that have been detached and idle for longer than idleTTL.
-func NewReaper(svc *Service, idleTTL, checkInterval time.Duration) *Reaper {
+func newReaper(svc *Service, idleTTL, checkInterval time.Duration) *Reaper {
 	return &Reaper{
 		service:       svc,
 		idleTTL:       idleTTL,

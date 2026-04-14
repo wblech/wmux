@@ -19,10 +19,10 @@ type Batcher struct {
 	flush    chan struct{}
 }
 
-// NewBatcher creates a Batcher that calls onFlush with accumulated data at the given interval.
+// newBatcher creates a Batcher that calls onFlush with accumulated data at the given interval.
 // If interval is less than 1ms, it is clamped to 1ms.
 // The internal flush goroutine starts immediately.
-func NewBatcher(interval time.Duration, onFlush func([]byte)) *Batcher {
+func newBatcher(interval time.Duration, onFlush func([]byte)) *Batcher {
 	if interval < minBatchInterval {
 		interval = minBatchInterval
 	}

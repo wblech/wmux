@@ -23,9 +23,9 @@ type AddonEmulator struct {
 	sessionID string
 }
 
-// NewAddonEmulatorWithProcess creates an AddonEmulator for a specific session.
+// newAddonEmulatorWithProcess creates an AddonEmulator for a specific session.
 // If process is nil, all operations are no-ops (like NoneEmulator).
-func NewAddonEmulatorWithProcess(proc AddonProcess, sessionID string) *AddonEmulator {
+func newAddonEmulatorWithProcess(proc AddonProcess, sessionID string) *AddonEmulator {
 	em := &AddonEmulator{
 		mu:        sync.Mutex{},
 		process:   proc,

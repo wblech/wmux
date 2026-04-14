@@ -13,10 +13,10 @@ type Buffer struct {
 	paused        bool
 }
 
-// NewBuffer creates a new Buffer with the given high and low watermark thresholds.
+// newBuffer creates a new Buffer with the given high and low watermark thresholds.
 // highWatermark is the size at which the buffer enters a paused state.
 // lowWatermark is the size at which a paused buffer resumes.
-func NewBuffer(highWatermark, lowWatermark int) *Buffer {
+func newBuffer(highWatermark, lowWatermark int) *Buffer {
 	return &Buffer{
 		mu:            sync.Mutex{},
 		data:          nil,

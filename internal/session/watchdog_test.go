@@ -40,7 +40,7 @@ func TestWatchdog_KillsOrphanedSession(t *testing.T) {
 	require.NoError(t, cmd.Run())
 
 	killed := make(chan string, 1)
-	w := NewWatchdog(svc, 50*time.Millisecond)
+	w := newWatchdog(svc, 50*time.Millisecond)
 	w.OnKill = func(id string) { killed <- id }
 	stop := w.Start()
 	defer stop()
@@ -79,7 +79,7 @@ func TestWatchdog_SkipsAliveProcess(t *testing.T) {
 	require.NoError(t, err)
 
 	killed := false
-	w := NewWatchdog(svc, 50*time.Millisecond)
+	w := newWatchdog(svc, 50*time.Millisecond)
 	w.OnKill = func(_ string) { killed = true }
 	stop := w.Start()
 
@@ -93,7 +93,7 @@ func TestWatchdog_SkipsAliveProcess(t *testing.T) {
 
 func TestWatchdog_StopIsIdempotent(_ *testing.T) {
 	svc := NewService(&pty.UnixSpawner{})
-	w := NewWatchdog(svc, time.Second)
+	w := newWatchdog(svc, time.Second)
 	stop := w.Start()
 	stop()
 	stop() // second call should not panic

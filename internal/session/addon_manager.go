@@ -18,8 +18,8 @@ type AddonManager struct {
 	process AddonProcess
 }
 
-// NewAddonManager creates an AddonManager with the given process starter.
-func NewAddonManager(starter ProcessStarter) *AddonManager {
+// newAddonManager creates an AddonManager with the given process starter.
+func newAddonManager(starter ProcessStarter) *AddonManager {
 	return &AddonManager{
 		mu:      sync.Mutex{},
 		starter: starter,
@@ -36,7 +36,7 @@ func (m *AddonManager) EmulatorFor(sessionID string, cols, rows int) *AddonEmula
 	if m.process == nil {
 		proc, err := m.starter.Start()
 		if err != nil {
-			return NewAddonEmulatorWithProcess(nil, sessionID)
+			return newAddonEmulatorWithProcess(nil, sessionID)
 		}
 		m.process = proc
 	}

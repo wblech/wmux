@@ -24,7 +24,7 @@ func TestReaper_KillsIdleDetachedSession(t *testing.T) {
 	require.NoError(t, svc.Detach("idle-1"))
 
 	reaped := make(chan string, 1)
-	r := NewReaper(svc, 50*time.Millisecond, 30*time.Millisecond)
+	r := newReaper(svc, 50*time.Millisecond, 30*time.Millisecond)
 	r.OnReap = func(id string) { reaped <- id }
 	stop := r.Start()
 	defer stop()
@@ -48,7 +48,7 @@ func TestReaper_SkipsAliveSession(t *testing.T) {
 	require.NoError(t, err)
 
 	reaped := false
-	r := NewReaper(svc, 10*time.Millisecond, 20*time.Millisecond)
+	r := newReaper(svc, 10*time.Millisecond, 20*time.Millisecond)
 	r.OnReap = func(_ string) { reaped = true }
 	stop := r.Start()
 
@@ -71,7 +71,7 @@ func TestReaper_SkipsRecentActivity(t *testing.T) {
 	require.NoError(t, svc.Detach("recent-1"))
 
 	reaped := false
-	r := NewReaper(svc, 200*time.Millisecond, 50*time.Millisecond)
+	r := newReaper(svc, 200*time.Millisecond, 50*time.Millisecond)
 	r.OnReap = func(_ string) { reaped = true }
 	stop := r.Start()
 
@@ -88,7 +88,7 @@ func TestReaper_SkipsRecentActivity(t *testing.T) {
 func TestReaper_StopPreventsReaping(_ *testing.T) {
 	svc := NewService(&pty.UnixSpawner{})
 
-	r := NewReaper(svc, time.Hour, time.Minute)
+	r := newReaper(svc, time.Hour, time.Minute)
 	stop := r.Start()
 	stop()
 	// Should not panic or hang.

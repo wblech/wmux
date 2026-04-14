@@ -30,7 +30,7 @@ func TestHeartbeatManager_SendsHeartbeat(t *testing.T) {
 		MissedHeartbeats: 0,
 	}
 
-	hm := NewHeartbeatManager(50*time.Millisecond, 3)
+	hm := newHeartbeatManager(50*time.Millisecond, 3)
 	hm.Track(c)
 
 	stop := hm.Start()
@@ -42,7 +42,7 @@ func TestHeartbeatManager_SendsHeartbeat(t *testing.T) {
 }
 
 func TestHeartbeatManager_AckResetsCounter(t *testing.T) {
-	hm := NewHeartbeatManager(50*time.Millisecond, 3)
+	hm := newHeartbeatManager(50*time.Millisecond, 3)
 
 	now := time.Now()
 	c := &Client{
@@ -66,7 +66,7 @@ func TestHeartbeatManager_AckResetsCounter(t *testing.T) {
 }
 
 func TestHeartbeatManager_AckUnknownClient(_ *testing.T) {
-	hm := NewHeartbeatManager(50*time.Millisecond, 3)
+	hm := newHeartbeatManager(50*time.Millisecond, 3)
 	// Should not panic.
 	hm.Ack("nonexistent")
 }
@@ -88,7 +88,7 @@ func TestHeartbeatManager_DeadClientCallback(t *testing.T) {
 	}
 
 	deadCh := make(chan string, 1)
-	hm := NewHeartbeatManager(20*time.Millisecond, 2)
+	hm := newHeartbeatManager(20*time.Millisecond, 2)
 	hm.OnDead(func(clientID string) {
 		deadCh <- clientID
 	})
@@ -108,7 +108,7 @@ func TestHeartbeatManager_DeadClientCallback(t *testing.T) {
 }
 
 func TestHeartbeatManager_Untrack(t *testing.T) {
-	hm := NewHeartbeatManager(50*time.Millisecond, 3)
+	hm := newHeartbeatManager(50*time.Millisecond, 3)
 
 	now := time.Now()
 	c := &Client{
@@ -132,7 +132,7 @@ func TestHeartbeatManager_Untrack(t *testing.T) {
 }
 
 func TestHeartbeatManager_Stop(_ *testing.T) {
-	hm := NewHeartbeatManager(50*time.Millisecond, 3)
+	hm := newHeartbeatManager(50*time.Millisecond, 3)
 	stop := hm.Start()
 	stop()
 	// Calling stop again should not panic.
@@ -140,7 +140,7 @@ func TestHeartbeatManager_Stop(_ *testing.T) {
 }
 
 func TestHeartbeatManager_SkipsNilStream(t *testing.T) {
-	hm := NewHeartbeatManager(50*time.Millisecond, 3)
+	hm := newHeartbeatManager(50*time.Millisecond, 3)
 
 	now := time.Now()
 	c := &Client{
@@ -183,7 +183,7 @@ func TestHeartbeatManager_ExceedsMissedWithoutWrite(t *testing.T) {
 	}
 
 	deadCh := make(chan string, 1)
-	hm := NewHeartbeatManager(20*time.Millisecond, 3)
+	hm := newHeartbeatManager(20*time.Millisecond, 3)
 	hm.OnDead(func(clientID string) {
 		deadCh <- clientID
 	})

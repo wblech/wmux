@@ -18,9 +18,9 @@ type HeartbeatManager struct {
 	onDead    func(clientID string)
 }
 
-// NewHeartbeatManager creates a HeartbeatManager that sends heartbeats at the
+// newHeartbeatManager creates a HeartbeatManager that sends heartbeats at the
 // given interval and considers a client dead after maxMissed misses.
-func NewHeartbeatManager(interval time.Duration, maxMissed int) *HeartbeatManager {
+func newHeartbeatManager(interval time.Duration, maxMissed int) *HeartbeatManager {
 	return &HeartbeatManager{
 		mu:        sync.RWMutex{},
 		clients:   make(map[string]*Client),

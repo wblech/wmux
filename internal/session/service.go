@@ -169,8 +169,8 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 		return nil, fmt.Errorf("spawn pty: %w", err)
 	}
 
-	buf := NewBuffer(highWM, lowWM)
-	batcher := NewBatcher(batchInterval, func(data []byte) {
+	buf := newBuffer(highWM, lowWM)
+	batcher := newBatcher(batchInterval, func(data []byte) {
 		buf.Write(data) //nolint:errcheck
 	})
 

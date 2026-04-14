@@ -28,6 +28,11 @@ Files in `internal/<domain>/` must be one of:
 - Forbidden package names: utils, common, helpers, shared, base, models, lib, types, misc, core
 - No `Get` prefix on getters: use `Name()` not `GetName()`
 - Repository files: `<adapter>repository.go` (e.g., `postgresrepository.go`)
+- **Only the domain service constructor is exported (`NewService`).** Internal
+  sub-components (buffers, batchers, reapers, managers, etc.) that are only used
+  within the same package must use private constructors (`newBuffer`, not
+  `NewBuffer`). goframe warns on any exported `New*` not in `fx.Provide()` —
+  privatizing internal constructors is the correct fix.
 
 ## Policy by Layer
 
