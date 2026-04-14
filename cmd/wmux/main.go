@@ -116,8 +116,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  create    Create a new session")
 	fmt.Fprintln(os.Stderr, "  attach    Attach to an existing session")
 	fmt.Fprintln(os.Stderr, "  detach    Detach from a session")
-	fmt.Fprintln(os.Stderr, "  kill      Kill a session")
-	fmt.Fprintln(os.Stderr, "  list      List all sessions")
+	fmt.Fprintln(os.Stderr, "  kill      Kill a session or all by prefix (--prefix <prefix>)")
+	fmt.Fprintln(os.Stderr, "  list      List sessions (--prefix <prefix>, --quiet)")
 	fmt.Fprintln(os.Stderr, "  info      Show session information")
 	fmt.Fprintln(os.Stderr, "  status    Show daemon status")
 	fmt.Fprintln(os.Stderr, "  exec      Send input to a session without attaching")
@@ -463,8 +463,13 @@ func cmdDetach(args []string) int {
 }
 
 func cmdKill(args []string) int {
+	if len(args) >= 2 && args[0] == "--prefix" {
+		return cmdKillPrefix(args[1])
+	}
+
 	if len(args) < 1 {
 		fmt.Fprintln(os.Stderr, "Usage: wmux kill <session-id>")
+		fmt.Fprintln(os.Stderr, "       wmux kill --prefix <prefix>")
 		return 1
 	}
 
@@ -493,7 +498,7 @@ func cmdKill(args []string) int {
 	return 0
 }
 
-func cmdList(_ []string) int {
+func cmdKillPrefix(prefix string) int {
 	conn, _, err := dialDaemon(socketPath, tokenPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -501,7 +506,81 @@ func cmdList(_ []string) int {
 	}
 	defer func() { _ = conn.Close() }()
 
-	resp, err := sendRequest(conn, protocol.MsgList, nil)
+	resp, err := sendRequest(conn, protocol.MsgKillPrefix, struct {
+		Prefix string `json:"prefix"`
+	}{Prefix: prefix})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	var result struct {
+		Killed []string          `json:"killed"`
+		Errors map[string]string `json:"errors,omitempty"`
+	}
+
+	if err := json.Unmarshal(resp.Payload, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	for _, id := range result.Killed {
+		fmt.Printf("%s: killed\n", id)
+	}
+	for id, errMsg := range result.Errors {
+		fmt.Printf("%s: error: %s\n", id, errMsg)
+	}
+
+	if len(result.Errors) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func cmdList(args []string) int {
+	var (
+		prefix string
+		quiet  bool
+	)
+
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--prefix":
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "error: --prefix requires a value")
+				return 1
+			}
+			prefix = args[i+1]
+			i += 2
+			continue
+		case "--quiet", "-q":
+			quiet = true
+			i++
+			continue
+		}
+		break
+	}
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	var payload any
+	if prefix != "" {
+		payload = struct {
+			Prefix string `json:"prefix"`
+		}{Prefix: prefix}
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgList, payload)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -526,7 +605,16 @@ func cmdList(_ []string) int {
 	}
 
 	if len(sessions) == 0 {
-		fmt.Println("No sessions")
+		if !quiet {
+			fmt.Println("No sessions")
+		}
+		return 0
+	}
+
+	if quiet {
+		for _, s := range sessions {
+			fmt.Println(s.ID)
+		}
 		return 0
 	}
 
