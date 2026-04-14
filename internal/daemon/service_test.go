@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -2560,4 +2561,71 @@ func TestDaemon_History_SessionNotFound(t *testing.T) {
 	frame, err := ctrl.ReadFrame()
 	require.NoError(t, err)
 	assert.Equal(t, protocol.MsgError, frame.Type)
+}
+
+func TestDaemon_ListSessions_PrefixFilter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create two sessions with prefix and one without.
+	for _, id := range []string{"proj-a/s1", "proj-a/s2", "other/s3"} {
+		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+			ID:    id,
+			Shell: "/bin/sh",
+			Cols:  80,
+			Rows:  24,
+		})
+		require.Equal(t, protocol.MsgOK, resp.Type, "create %s", id)
+	}
+
+	// List with prefix filter.
+	listResp := sendControl(t, ctrl, protocol.MsgList, ListRequest{Prefix: "proj-a"})
+	require.Equal(t, protocol.MsgOK, listResp.Type)
+
+	var sessions []SessionResponse
+	require.NoError(t, json.Unmarshal(listResp.Payload, &sessions))
+	assert.Len(t, sessions, 2)
+	for _, s := range sessions {
+		assert.True(t, strings.HasPrefix(s.ID, "proj-a/"))
+	}
+}
+
+func TestDaemon_ListSessions_NoFilter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create sessions.
+	for _, id := range []string{"a/s1", "b/s2"} {
+		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+			ID:    id,
+			Shell: "/bin/sh",
+			Cols:  80,
+			Rows:  24,
+		})
+		require.Equal(t, protocol.MsgOK, resp.Type)
+	}
+
+	// List without filter (nil payload).
+	listResp := sendControl(t, ctrl, protocol.MsgList, nil)
+	require.Equal(t, protocol.MsgOK, listResp.Type)
+
+	var sessions []SessionResponse
+	require.NoError(t, json.Unmarshal(listResp.Payload, &sessions))
+	assert.Len(t, sessions, 2)
 }

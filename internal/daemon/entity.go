@@ -172,6 +172,23 @@ type RecordResponse struct {
 	Path      string `json:"path,omitempty"`
 }
 
+// ListRequest is the optional JSON payload for MsgList.
+// When empty or nil payload, all sessions are returned.
+type ListRequest struct {
+	Prefix string `json:"prefix,omitempty"`
+}
+
+// KillPrefixRequest is the JSON payload for MsgKillPrefix.
+type KillPrefixRequest struct {
+	Prefix string `json:"prefix"`
+}
+
+// KillPrefixResponse is the JSON payload for MsgKillPrefix responses.
+type KillPrefixResponse struct {
+	Killed []string          `json:"killed"`
+	Errors map[string]string `json:"errors,omitempty"`
+}
+
 // HistoryRequest is the JSON payload for MsgHistory.
 type HistoryRequest struct {
 	SessionID string `json:"session_id"`

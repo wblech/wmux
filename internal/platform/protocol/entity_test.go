@@ -64,6 +64,7 @@ func TestMessageType_String_Recording(t *testing.T) {
 		{MsgRecord, "record"},
 		{MsgHistory, "history"},
 		{MsgHistoryEnd, "history_end"},
+		{MsgKillPrefix, "kill_prefix"},
 	}
 
 	for _, tc := range cases {

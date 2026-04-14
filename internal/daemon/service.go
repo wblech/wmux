@@ -303,7 +303,7 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 	case protocol.MsgCreate:
 		d.handleCreate(c, frame)
 	case protocol.MsgList:
-		d.handleList(c)
+		d.handleList(c, frame)
 	case protocol.MsgInfo:
 		d.handleInfo(c, frame)
 	case protocol.MsgKill:
@@ -376,11 +376,19 @@ func (d *Daemon) handleCreate(c ConnectedClient, frame protocol.Frame) {
 }
 
 // handleList processes a MsgList frame.
-func (d *Daemon) handleList(c ConnectedClient) {
+func (d *Daemon) handleList(c ConnectedClient, frame protocol.Frame) {
+	var req ListRequest
+	if len(frame.Payload) > 0 {
+		_ = json.Unmarshal(frame.Payload, &req)
+	}
+
 	sessions := d.sessionSvc.List()
 	resps := make([]SessionResponse, 0, len(sessions))
 
 	for _, info := range sessions {
+		if req.Prefix != "" && !strings.HasPrefix(info.ID, req.Prefix+"/") {
+			continue
+		}
 		resps = append(resps, sessionInfoToResponse(info))
 	}
 

@@ -232,6 +232,39 @@ func TestHistoryRequest_Defaults_JSON(t *testing.T) {
 	assert.Equal(t, 0, decoded.Lines)
 }
 
+func TestListRequest_JSON(t *testing.T) {
+	req := ListRequest{Prefix: "proj-a"}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+	var decoded ListRequest
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, req, decoded)
+}
+
+func TestKillPrefixRequest_JSON(t *testing.T) {
+	req := KillPrefixRequest{Prefix: "proj-a"}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+	var decoded KillPrefixRequest
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, req, decoded)
+}
+
+func TestKillPrefixResponse_JSON(t *testing.T) {
+	resp := KillPrefixResponse{
+		Killed: []string{"proj-a/s1", "proj-a/s2"},
+		Errors: map[string]string{"proj-a/s3": "session not alive"},
+	}
+	data, err := json.Marshal(resp)
+	require.NoError(t, err)
+	var decoded KillPrefixResponse
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, resp, decoded)
+}
+
 func TestSentinelErrors(t *testing.T) {
 	assert.NotEqual(t, ErrDaemonRunning.Error(), ErrDaemonNotRunning.Error())
 	assert.NotEqual(t, ErrAlreadyAttached.Error(), ErrNotAttached.Error())
