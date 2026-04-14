@@ -58,6 +58,10 @@ func main() {
 		exitCode = cmdExec(args)
 	case "wait":
 		exitCode = cmdWait(args)
+	case "record":
+		exitCode = cmdRecord(args)
+	case "history":
+		exitCode = cmdHistory(args)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -118,6 +122,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  status    Show daemon status")
 	fmt.Fprintln(os.Stderr, "  exec      Send input to a session without attaching")
 	fmt.Fprintln(os.Stderr, "  wait      Wait for a session condition (exit, idle, match)")
+	fmt.Fprintln(os.Stderr, "  record    Start or stop session recording")
+	fmt.Fprintln(os.Stderr, "  history   Export session scrollback history")
 	fmt.Fprintln(os.Stderr, "  events    Stream session events")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags:")
@@ -984,6 +990,142 @@ func execPrefix(args []string, prefix string, newline bool) int {
 	}
 
 	return printExecSyncResults(resp)
+}
+
+func cmdRecord(args []string) int {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "Usage: wmux record <start|stop> <session-id>")
+		return 1
+	}
+
+	action := args[0]
+	sessionID := args[1]
+
+	if action != "start" && action != "stop" {
+		fmt.Fprintln(os.Stderr, "error: action must be 'start' or 'stop'")
+		return 1
+	}
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	type recordReq struct {
+		SessionID string `json:"session_id"`
+		Action    string `json:"action"`
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgRecord, recordReq{
+		SessionID: sessionID,
+		Action:    action,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	var rr struct {
+		SessionID string `json:"session_id"`
+		Recording bool   `json:"recording"`
+		Path      string `json:"path,omitempty"`
+	}
+	if err := json.Unmarshal(resp.Payload, &rr); err == nil {
+		if rr.Recording {
+			fmt.Printf("Recording started: %s -> %s\n", rr.SessionID, rr.Path)
+		} else {
+			fmt.Printf("Recording stopped: %s\n", rr.SessionID)
+		}
+	}
+
+	return 0
+}
+
+func cmdHistory(args []string) int {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "Usage: wmux history <session-id> [--format ansi|text|html] [--lines N]")
+		return 1
+	}
+
+	sessionID := args[0]
+	format := "ansi"
+	lines := 0
+
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "--format":
+			if i+1 < len(args) {
+				format = args[i+1]
+				i++
+			}
+		case "--lines":
+			if i+1 < len(args) {
+				n, err := strconv.Atoi(args[i+1])
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "error: invalid --lines value: %s\n", args[i+1])
+					return 1
+				}
+				lines = n
+				i++
+			}
+		}
+	}
+
+	conn, _, err := dialDaemon(socketPath, tokenPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	defer func() { _ = conn.Close() }()
+
+	type histReq struct {
+		SessionID string `json:"session_id"`
+		Format    string `json:"format"`
+		Lines     int    `json:"lines,omitempty"`
+	}
+
+	resp, err := sendRequest(conn, protocol.MsgHistory, histReq{
+		SessionID: sessionID,
+		Format:    format,
+		Lines:     lines,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+
+	if checkError(resp) {
+		return 1
+	}
+
+	// Read streamed history frames until MsgHistoryEnd.
+	if resp.Type == protocol.MsgHistory {
+		_, _ = os.Stdout.Write(resp.Payload)
+	}
+
+	for {
+		frame, readErr := conn.ReadFrame()
+		if readErr != nil {
+			if !errors.Is(readErr, io.EOF) {
+				fmt.Fprintf(os.Stderr, "error: %v\n", readErr)
+			}
+			break
+		}
+		if frame.Type == protocol.MsgHistoryEnd {
+			break
+		}
+		if frame.Type == protocol.MsgHistory {
+			_, _ = os.Stdout.Write(frame.Payload)
+		}
+	}
+
+	return 0
 }
 
 func printExecSyncResults(resp protocol.Frame) int {
