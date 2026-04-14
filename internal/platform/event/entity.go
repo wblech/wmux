@@ -29,6 +29,8 @@ const (
 	Notification
 	// OutputFlood is emitted when a session's output rate exceeds a threshold.
 	OutputFlood
+	// RecordingLimitReached is emitted when a recording file size limit is exceeded.
+	RecordingLimitReached
 )
 
 // String returns the dot-notation name of the event type.
@@ -54,6 +56,8 @@ func (t Type) String() string {
 		return "notification"
 	case OutputFlood:
 		return "output.flood"
+	case RecordingLimitReached:
+		return "recording.limit_reached"
 	default:
 		return "unknown"
 	}

@@ -1,7 +1,6 @@
 package ansi
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -87,9 +86,9 @@ func TestToHTML_HTMLEscaping(t *testing.T) {
 func TestToHTML_ResetMidStream(t *testing.T) {
 	input := []byte("\x1b[31mred\x1b[0m plain \x1b[32mgreen\x1b[0m")
 	result := ToHTML(input)
-	require.True(t, strings.Contains(result, "red"))
-	require.True(t, strings.Contains(result, "plain"))
-	require.True(t, strings.Contains(result, "green"))
+	require.Contains(t, result, "red")
+	require.Contains(t, result, "plain")
+	require.Contains(t, result, "green")
 }
 
 func TestToHTML_BG256Color(t *testing.T) {

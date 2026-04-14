@@ -36,13 +36,13 @@ func TestStrip_MultipleSGR(t *testing.T) {
 }
 
 func TestStrip_Empty(t *testing.T) {
-	assert.Equal(t, "", Strip(nil))
-	assert.Equal(t, "", Strip([]byte{}))
+	assert.Empty(t, Strip(nil))
+	assert.Empty(t, Strip([]byte{}))
 }
 
 func TestStrip_OnlyEscapes(t *testing.T) {
 	input := []byte("\x1b[31m\x1b[0m")
-	assert.Equal(t, "", Strip(input))
+	assert.Empty(t, Strip(input))
 }
 
 func TestStrip_256Color(t *testing.T) {

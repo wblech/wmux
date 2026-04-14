@@ -47,3 +47,26 @@ func WithMaxScrollbackSize(n int64) Option {
 		d.maxScrollbackSize = n
 	}
 }
+
+// WithRecordingMaxSize sets the maximum recording file size in bytes.
+// A value of 0 means unlimited.
+func WithRecordingMaxSize(n int64) Option {
+	return func(d *Daemon) {
+		d.recordingMaxSize = n
+	}
+}
+
+// WithRecordingDir sets the directory where recording files are stored.
+func WithRecordingDir(dir string) Option {
+	return func(d *Daemon) {
+		d.recordingDir = dir
+	}
+}
+
+// WithMaxHistoryDumpSize sets the maximum size in bytes for history dump responses.
+// A value of 0 means unlimited.
+func WithMaxHistoryDumpSize(n int64) Option {
+	return func(d *Daemon) {
+		d.maxHistoryDumpSize = n
+	}
+}

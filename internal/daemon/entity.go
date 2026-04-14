@@ -175,7 +175,7 @@ type RecordResponse struct {
 // HistoryRequest is the JSON payload for MsgHistory.
 type HistoryRequest struct {
 	SessionID string `json:"session_id"`
-	Format    string `json:"format"`         // "ansi", "text", "html"
+	Format    string `json:"format"`          // "ansi", "text", "html"
 	Lines     int    `json:"lines,omitempty"` // 0 = all available
 }
 

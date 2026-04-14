@@ -81,7 +81,7 @@ func (r *historyReader) Read(p []byte) (int, error) {
 	frame, err := r.conn.ReadFrame()
 	if err != nil {
 		r.done = true
-		return 0, err
+		return 0, fmt.Errorf("client: read history frame: %w", err)
 	}
 
 	if frame.Type == protocol.MsgHistoryEnd {

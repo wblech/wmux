@@ -34,6 +34,7 @@ func TestType_String_Phase2(t *testing.T) {
 		{CwdChanged, "cwd.changed"},
 		{Notification, "notification"},
 		{OutputFlood, "output.flood"},
+		{RecordingLimitReached, "recording.limit_reached"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.want, func(t *testing.T) {

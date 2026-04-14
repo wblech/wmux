@@ -34,9 +34,9 @@ func TestWriter_CreatesAsciinemaV2(t *testing.T) {
 	var header map[string]any
 	err = json.Unmarshal([]byte(lines[0]), &header)
 	require.NoError(t, err)
-	assert.Equal(t, float64(2), header["version"])
-	assert.Equal(t, float64(80), header["width"])
-	assert.Equal(t, float64(24), header["height"])
+	assert.InDelta(t, float64(2), header["version"], 0)
+	assert.InDelta(t, float64(80), header["width"], 0)
+	assert.InDelta(t, float64(24), header["height"], 0)
 
 	// Second line is an event: [timestamp, "o", "hello"]
 	var event []any
@@ -88,7 +88,7 @@ func TestWriter_MaxSize(t *testing.T) {
 		}
 	}
 
-	assert.ErrorIs(t, limitErr, ErrSizeLimitReached)
+	require.ErrorIs(t, limitErr, ErrSizeLimitReached)
 	_ = w.Close()
 
 	info, err := os.Stat(path)
@@ -116,7 +116,7 @@ func TestWriter_Path(t *testing.T) {
 
 	w, err := NewWriter(path, 80, 24, 0)
 	require.NoError(t, err)
-	defer w.Close()
+	defer w.Close() //nolint:errcheck
 
 	assert.Equal(t, path, w.Path())
 }

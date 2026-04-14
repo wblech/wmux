@@ -2292,3 +2292,272 @@ func TestDaemon_Wait_UntilMatch_Timeout(t *testing.T) {
 	assert.True(t, result.TimedOut)
 	assert.False(t, result.Matched)
 }
+
+// --- Record handler tests ---
+
+func TestDaemon_Record_Start(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	d, token, sock := testDaemon(t, WithRecordingDir(dir))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "rec-sess", Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	resp := sendControl(t, ctrl, protocol.MsgRecord, RecordRequest{
+		SessionID: "rec-sess", Action: "start",
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	var rr RecordResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &rr))
+	assert.True(t, rr.Recording)
+	assert.Equal(t, "rec-sess", rr.SessionID)
+	assert.NotEmpty(t, rr.Path)
+}
+
+func TestDaemon_Record_Stop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	d, token, sock := testDaemon(t, WithRecordingDir(dir))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "rec-stop", Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	startResp := sendControl(t, ctrl, protocol.MsgRecord, RecordRequest{
+		SessionID: "rec-stop", Action: "start",
+	})
+	require.Equal(t, protocol.MsgOK, startResp.Type)
+
+	stopResp := sendControl(t, ctrl, protocol.MsgRecord, RecordRequest{
+		SessionID: "rec-stop", Action: "stop",
+	})
+	require.Equal(t, protocol.MsgOK, stopResp.Type)
+
+	var rr RecordResponse
+	require.NoError(t, json.Unmarshal(stopResp.Payload, &rr))
+	assert.False(t, rr.Recording)
+}
+
+func TestDaemon_Record_InvalidAction(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	d, token, sock := testDaemon(t, WithRecordingDir(dir))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgRecord, RecordRequest{
+		SessionID: "s1", Action: "invalid",
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_Record_AlreadyRecording(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir := t.TempDir()
+	d, token, sock := testDaemon(t, WithRecordingDir(dir))
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "rec-dup", Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	resp1 := sendControl(t, ctrl, protocol.MsgRecord, RecordRequest{
+		SessionID: "rec-dup", Action: "start",
+	})
+	require.Equal(t, protocol.MsgOK, resp1.Type)
+
+	resp2 := sendControl(t, ctrl, protocol.MsgRecord, RecordRequest{
+		SessionID: "rec-dup", Action: "start",
+	})
+	assert.Equal(t, protocol.MsgError, resp2.Type)
+}
+
+// --- History handler tests ---
+
+func TestDaemon_History_ANSI(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "hist-sess", Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// Send some input to generate output.
+	sendControl(t, ctrl, protocol.MsgExec, ExecRequest{
+		SessionID: "hist-sess", Input: "echo hello-from-history", Newline: true,
+	})
+
+	// Give time for output to be generated.
+	time.Sleep(200 * time.Millisecond)
+
+	// Send history request manually (multi-frame response).
+	histReq, _ := json.Marshal(HistoryRequest{
+		SessionID: "hist-sess", Format: "ansi", Lines: 0,
+	})
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistory,
+		Payload: histReq,
+	})
+	require.NoError(t, err)
+
+	// Read frames until MsgHistoryEnd. NoneEmulator may return empty scrollback,
+	// so we only verify the protocol flow completes without error.
+	gotEnd := false
+	for {
+		frame, err := ctrl.ReadFrame()
+		require.NoError(t, err)
+
+		if frame.Type == protocol.MsgHistoryEnd {
+			gotEnd = true
+			break
+		}
+
+		if frame.Type == protocol.MsgError {
+			t.Fatalf("got error: %s", string(frame.Payload))
+		}
+
+		require.Equal(t, protocol.MsgHistory, frame.Type)
+	}
+
+	assert.True(t, gotEnd, "should receive MsgHistoryEnd")
+}
+
+func TestDaemon_History_Text(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "hist-text", Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	sendControl(t, ctrl, protocol.MsgExec, ExecRequest{
+		SessionID: "hist-text", Input: "echo histtext", Newline: true,
+	})
+	time.Sleep(200 * time.Millisecond)
+
+	histReq, _ := json.Marshal(HistoryRequest{
+		SessionID: "hist-text", Format: "text", Lines: 0,
+	})
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistory,
+		Payload: histReq,
+	})
+	require.NoError(t, err)
+
+	var allData []byte
+	for {
+		frame, err := ctrl.ReadFrame()
+		require.NoError(t, err)
+
+		if frame.Type == protocol.MsgHistoryEnd {
+			break
+		}
+
+		require.Equal(t, protocol.MsgHistory, frame.Type)
+		allData = append(allData, frame.Payload...)
+	}
+
+	// Text format should have no ANSI escapes.
+	assert.NotContains(t, string(allData), "\x1b[")
+}
+
+func TestDaemon_History_InvalidFormat(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgHistory, HistoryRequest{
+		SessionID: "s1", Format: "xml", Lines: 0,
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_History_SessionNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Invalid format is caught before session lookup, so use a valid format
+	// to verify the session-not-found path.
+	histReq, _ := json.Marshal(HistoryRequest{
+		SessionID: "nonexistent", Format: "ansi", Lines: 0,
+	})
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistory,
+		Payload: histReq,
+	})
+	require.NoError(t, err)
+
+	frame, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, frame.Type)
+}

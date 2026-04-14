@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,9 +12,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/wblech/wmux/internal/platform/ansi"
 	"github.com/wblech/wmux/internal/platform/event"
 	"github.com/wblech/wmux/internal/platform/history"
 	"github.com/wblech/wmux/internal/platform/protocol"
+	"github.com/wblech/wmux/internal/platform/recording"
 )
 
 // logErr logs a non-fatal error to stderr. Intended for best-effort operations
@@ -138,21 +141,25 @@ type TransportServer interface {
 // Daemon wires a TransportServer to a SessionManager, routes control
 // messages, and broadcasts session output to attached clients.
 type Daemon struct {
-	mu                sync.RWMutex
-	server            TransportServer
-	sessionSvc        SessionManager
-	version           string
-	pidFilePath       string
-	dataDir           string
-	cancelFunc        context.CancelFunc
-	attachments       map[string]map[string]struct{} // session_id -> set of client_ids
-	clientSession     map[string]string              // client_id -> session_id
-	eventBus          EventBus                       // may be nil
-	startedAt         time.Time
-	coldRestore       bool
-	maxScrollbackSize int64
-	scrollbackWriters map[string]*history.Writer // session_id -> writer (cold restore only)
-	waiters           map[string][]*waiter       // session_id -> list of active waiters
+	mu                 sync.RWMutex
+	server             TransportServer
+	sessionSvc         SessionManager
+	version            string
+	pidFilePath        string
+	dataDir            string
+	cancelFunc         context.CancelFunc
+	attachments        map[string]map[string]struct{} // session_id -> set of client_ids
+	clientSession      map[string]string              // client_id -> session_id
+	eventBus           EventBus                       // may be nil
+	startedAt          time.Time
+	coldRestore        bool
+	maxScrollbackSize  int64
+	scrollbackWriters  map[string]*history.Writer   // session_id -> writer (cold restore only)
+	waiters            map[string][]*waiter         // session_id -> list of active waiters
+	recordings         map[string]*recording.Writer // session_id -> active recording writer
+	recordingMaxSize   int64
+	recordingDir       string
+	maxHistoryDumpSize int64
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -160,21 +167,25 @@ type Daemon struct {
 // the PID file path, version, and data directory.
 func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option) *Daemon {
 	d := &Daemon{
-		mu:                sync.RWMutex{},
-		server:            server,
-		sessionSvc:        sessionSvc,
-		version:           "",
-		pidFilePath:       "",
-		dataDir:           "",
-		cancelFunc:        nil,
-		attachments:       make(map[string]map[string]struct{}),
-		clientSession:     make(map[string]string),
-		eventBus:          nil,
-		startedAt:         time.Time{},
-		coldRestore:       false,
-		maxScrollbackSize: 0,
-		scrollbackWriters: make(map[string]*history.Writer),
-		waiters:           make(map[string][]*waiter),
+		mu:                 sync.RWMutex{},
+		server:             server,
+		sessionSvc:         sessionSvc,
+		version:            "",
+		pidFilePath:        "",
+		dataDir:            "",
+		cancelFunc:         nil,
+		attachments:        make(map[string]map[string]struct{}),
+		clientSession:      make(map[string]string),
+		eventBus:           nil,
+		startedAt:          time.Time{},
+		coldRestore:        false,
+		maxScrollbackSize:  0,
+		scrollbackWriters:  make(map[string]*history.Writer),
+		waiters:            make(map[string][]*waiter),
+		recordings:         make(map[string]*recording.Writer),
+		recordingMaxSize:   0,
+		recordingDir:       "",
+		maxHistoryDumpSize: 0,
 	}
 
 	for _, o := range opts {
@@ -217,6 +228,7 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.notifyExitWaiters(id, exitCode)
 		d.notifyExitOnNonExitWaiters(id, exitCode)
 		d.persistSessionExit(id, exitCode)
+		d.closeRecording(id)
 		d.publishEvent(event.Event{
 			Type:      event.SessionExited,
 			SessionID: id,
@@ -322,6 +334,10 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleExecSync(c, frame)
 	case protocol.MsgWait:
 		go d.handleWait(c, frame)
+	case protocol.MsgRecord:
+		d.handleRecord(c, frame)
+	case protocol.MsgHistory:
+		d.handleHistory(c, frame)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -608,6 +624,7 @@ func (d *Daemon) flushOutput() {
 
 		d.scanOSC(sessID, data)
 		d.persistOutput(sessID, data)
+		d.teeRecording(sessID, data)
 		d.notifyOutputWaiters(sessID, data)
 
 		payload := EncodeDataPayload(sessID, data)
@@ -642,6 +659,7 @@ func (d *Daemon) flushOutput() {
 
 		d.scanOSC(sessID, data)
 		d.persistOutput(sessID, data)
+		d.teeRecording(sessID, data)
 		d.notifyOutputWaiters(sessID, data)
 	}
 }
@@ -1203,6 +1221,176 @@ func (d *Daemon) persistOutput(sessionID string, data []byte) {
 	if w != nil {
 		_, _ = w.Write(data)
 	}
+}
+
+// handleRecord processes a MsgRecord frame to start or stop recording a session.
+func (d *Daemon) handleRecord(c ConnectedClient, frame protocol.Frame) {
+	var req RecordRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid record request"))
+		return
+	}
+
+	switch req.Action {
+	case "start":
+		d.recordStart(c, req)
+	case "stop":
+		d.recordStop(c, req)
+	default:
+		_ = c.Control().WriteFrame(errorFrame("invalid action: must be start or stop"))
+	}
+}
+
+func (d *Daemon) recordStart(c ConnectedClient, req RecordRequest) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if _, exists := d.recordings[req.SessionID]; exists {
+		_ = c.Control().WriteFrame(errorFrame("session already being recorded"))
+		return
+	}
+
+	info, err := d.sessionSvc.Get(req.SessionID)
+	if err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
+	sessionDir := filepath.Join(d.recordingDir, req.SessionID)
+	if err := os.MkdirAll(sessionDir, 0755); err != nil { //nolint:gosec
+		_ = c.Control().WriteFrame(errorFrame(fmt.Sprintf("create recording dir: %v", err)))
+		return
+	}
+
+	filename := fmt.Sprintf("recording-%s.cast", time.Now().Format("20060102T150405"))
+	recordPath := filepath.Join(sessionDir, filename)
+
+	w, err := recording.NewWriter(recordPath, info.Cols, info.Rows, d.recordingMaxSize)
+	if err != nil {
+		_ = c.Control().WriteFrame(errorFrame(fmt.Sprintf("start recording: %v", err)))
+		return
+	}
+
+	d.recordings[req.SessionID] = w
+
+	_ = c.Control().WriteFrame(okFrame(RecordResponse{
+		SessionID: req.SessionID,
+		Recording: true,
+		Path:      recordPath,
+	}))
+}
+
+func (d *Daemon) recordStop(c ConnectedClient, req RecordRequest) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	w, exists := d.recordings[req.SessionID]
+	if !exists {
+		_ = c.Control().WriteFrame(errorFrame("session is not being recorded"))
+		return
+	}
+
+	_ = w.Close()
+	delete(d.recordings, req.SessionID)
+
+	_ = c.Control().WriteFrame(okFrame(RecordResponse{
+		SessionID: req.SessionID,
+		Recording: false,
+		Path:      "",
+	}))
+}
+
+// teeRecording writes output data to the recording writer for the given session.
+func (d *Daemon) teeRecording(sessionID string, data []byte) {
+	d.mu.RLock()
+	w, ok := d.recordings[sessionID]
+	d.mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	if _, err := w.Write(data); err != nil {
+		if errors.Is(err, recording.ErrSizeLimitReached) {
+			d.mu.Lock()
+			delete(d.recordings, sessionID)
+			d.mu.Unlock()
+
+			d.publishEvent(event.Event{
+				Type:      event.RecordingLimitReached,
+				SessionID: sessionID,
+				Payload:   nil,
+			})
+		}
+	}
+}
+
+// closeRecording closes and removes the recording writer for a session on exit.
+func (d *Daemon) closeRecording(sessionID string) {
+	d.mu.Lock()
+	if w, ok := d.recordings[sessionID]; ok {
+		_ = w.Close()
+		delete(d.recordings, sessionID)
+	}
+	d.mu.Unlock()
+}
+
+// handleHistory processes a MsgHistory frame and streams scrollback data to the client.
+func (d *Daemon) handleHistory(c ConnectedClient, frame protocol.Frame) {
+	var req HistoryRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid history request"))
+		return
+	}
+
+	switch req.Format {
+	case "ansi", "text", "html":
+	default:
+		_ = c.Control().WriteFrame(errorFrame("invalid format: must be ansi, text, or html"))
+		return
+	}
+
+	snap, err := d.sessionSvc.Snapshot(req.SessionID)
+	if err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
+	data := snap.Scrollback
+
+	switch req.Format {
+	case "text":
+		data = []byte(ansi.Strip(data))
+	case "html":
+		data = []byte(ansi.ToHTML(data))
+	}
+
+	if d.maxHistoryDumpSize > 0 && int64(len(data)) > d.maxHistoryDumpSize {
+		data = data[:d.maxHistoryDumpSize]
+	}
+
+	const chunkSize = 1024 * 1024
+	for len(data) > 0 {
+		end := chunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+
+		chunk := data[:end]
+		data = data[end:]
+
+		_ = c.Control().WriteFrame(protocol.Frame{
+			Version: protocol.ProtocolVersion,
+			Type:    protocol.MsgHistory,
+			Payload: chunk,
+		})
+	}
+
+	_ = c.Control().WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistoryEnd,
+		Payload: nil,
+	})
 }
 
 // okFrame builds a MsgOK frame with an optional JSON payload.

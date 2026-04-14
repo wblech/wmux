@@ -65,6 +65,7 @@ func NewWriter(path string, cols, rows int, maxSize int64) (*Writer, error) {
 	}
 
 	return &Writer{
+		mu:        sync.Mutex{},
 		file:      f,
 		path:      path,
 		startTime: now,
@@ -125,5 +126,10 @@ func (w *Writer) Close() error {
 		return nil
 	}
 	w.closed = true
-	return w.file.Close()
+
+	if err := w.file.Close(); err != nil {
+		return fmt.Errorf("recording: close: %w", err)
+	}
+
+	return nil
 }
