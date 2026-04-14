@@ -161,9 +161,25 @@ func (c *Client) Resize(sessionID string, cols, rows int) error {
 	return nil
 }
 
-// List returns all sessions.
-func (c *Client) List() ([]SessionInfo, error) {
-	resp, err := c.sendRequest(protocol.MsgList, nil)
+// List returns all sessions, optionally filtered by options.
+func (c *Client) List(opts ...ListOption) ([]SessionInfo, error) {
+	cfg := &listConfig{}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	var payload []byte
+	if cfg.prefix != "" {
+		var err error
+		payload, err = json.Marshal(struct {
+			Prefix string `json:"prefix"`
+		}{Prefix: cfg.prefix})
+		if err != nil {
+			return nil, fmt.Errorf("client: marshal list: %w", err)
+		}
+	}
+
+	resp, err := c.sendRequest(protocol.MsgList, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -176,6 +192,30 @@ func (c *Client) List() ([]SessionInfo, error) {
 		return nil, fmt.Errorf("client: unmarshal list: %w", err)
 	}
 	return sessions, nil
+}
+
+// KillPrefix kills all sessions matching the given prefix.
+func (c *Client) KillPrefix(prefix string) (KillPrefixResult, error) {
+	payload, err := json.Marshal(struct {
+		Prefix string `json:"prefix"`
+	}{Prefix: prefix})
+	if err != nil {
+		return KillPrefixResult{}, fmt.Errorf("client: marshal kill_prefix: %w", err)
+	}
+
+	resp, err := c.sendRequest(protocol.MsgKillPrefix, payload)
+	if err != nil {
+		return KillPrefixResult{}, err
+	}
+	if resp.Type == protocol.MsgError {
+		return KillPrefixResult{}, c.parseError(resp)
+	}
+
+	var result KillPrefixResult
+	if err := json.Unmarshal(resp.Payload, &result); err != nil {
+		return KillPrefixResult{}, fmt.Errorf("client: unmarshal kill_prefix: %w", err)
+	}
+	return result, nil
 }
 
 // Info returns metadata about a specific session.
