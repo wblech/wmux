@@ -42,6 +42,15 @@ Files in `internal/<domain>/` must be one of:
 - Constructor functions must start with `With`: `WithTimeout(d time.Duration) Option`
 - Options must live in `options.go` or `*_options.go`
 - `New*` constructors should use variadic: `func NewService(opts ...Option)`
+- **Required parameters are positional arguments, not public options.** When a
+  value is always needed, the constructor/method receives it as a fixed argument
+  and sets it directly on the internal config. Only genuinely optional
+  configuration is exposed as public `With*` functions.
+- **Mutually exclusive modes get dedicated constructors.** Each takes
+  mode-specific values as required parameters, builds the config struct
+  directly, applies optional `With*` overrides, and delegates to a shared
+  private implementation.
+  Example (stdlib): `context.WithTimeout` / `context.WithCancel` / `context.WithValue`
 
 ## Testing
 

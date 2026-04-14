@@ -56,6 +56,23 @@ func TestMessageType_String_Phase3(t *testing.T) {
 	assert.Equal(t, "wait", MsgWait.String())
 }
 
+func TestMessageType_String_Recording(t *testing.T) {
+	cases := []struct {
+		mt   MessageType
+		want string
+	}{
+		{MsgRecord, "record"},
+		{MsgHistory, "history"},
+		{MsgHistoryEnd, "history_end"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.want, func(t *testing.T) {
+			assert.Equal(t, tc.want, tc.mt.String())
+		})
+	}
+}
+
 func TestMessageType_String_Unknown(t *testing.T) {
 	unknown := MessageType(0xFF)
 	assert.Equal(t, "unknown", unknown.String())

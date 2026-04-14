@@ -38,6 +38,9 @@ const (
 	MsgExec         MessageType = 0x15
 	MsgExecSync     MessageType = 0x16
 	MsgWait         MessageType = 0x17
+	MsgRecord       MessageType = 0x18
+	MsgHistory      MessageType = 0x19
+	MsgHistoryEnd   MessageType = 0x1A
 )
 
 // String returns the lowercase name of the message type.
@@ -89,6 +92,12 @@ func (m MessageType) String() string {
 		return "exec_sync"
 	case MsgWait:
 		return "wait"
+	case MsgRecord:
+		return "record"
+	case MsgHistory:
+		return "history"
+	case MsgHistoryEnd:
+		return "history_end"
 	default:
 		return "unknown"
 	}
