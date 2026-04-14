@@ -14,6 +14,8 @@ const (
 	OSCTypeCwd
 	// OSCTypeNotification indicates an OSC 9/99/777 notification.
 	OSCTypeNotification
+	// OSCTypeShellReady indicates a wmux shell-ready marker (OSC 777;wmux;shell-ready).
+	OSCTypeShellReady
 )
 
 // OSCResult holds a parsed OSC sequence.
@@ -81,6 +83,11 @@ func ParseOSC(data []byte) []OSCResult {
 			results = append(results, OSCResult{Type: OSCTypeNotification, Value: val})
 		case "777":
 			parts := strings.SplitN(oscValue, ";", 3)
+			// Detect wmux shell-ready marker: 777;wmux;shell-ready
+			if len(parts) >= 2 && parts[0] == "wmux" && parts[1] == "shell-ready" {
+				results = append(results, OSCResult{Type: OSCTypeShellReady, Value: "shell-ready"})
+				continue
+			}
 			val := oscValue
 			if len(parts) == 3 {
 				val = parts[2]

@@ -56,3 +56,38 @@ func TestParseOSC_BELTerminator(t *testing.T) {
 	assert.Len(t, result, 1)
 	assert.Equal(t, "Alert", result[0].Value)
 }
+
+func TestParseOSC_ShellReady(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []OSCResult
+	}{
+		{
+			name:  "shell-ready with ST",
+			input: "\x1b]777;wmux;shell-ready\x1b\\",
+			want:  []OSCResult{{Type: OSCTypeShellReady, Value: "shell-ready"}},
+		},
+		{
+			name:  "shell-ready with BEL",
+			input: "\x1b]777;wmux;shell-ready\x07",
+			want:  []OSCResult{{Type: OSCTypeShellReady, Value: "shell-ready"}},
+		},
+		{
+			name:  "regular 777 notification not shell-ready",
+			input: "\x1b]777;notify;title;body\x1b\\",
+			want:  []OSCResult{{Type: OSCTypeNotification, Value: "body"}},
+		},
+		{
+			name:  "shell-ready embedded in other output",
+			input: "prompt$ \x1b]777;wmux;shell-ready\x1b\\more output",
+			want:  []OSCResult{{Type: OSCTypeShellReady, Value: "shell-ready"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			results := ParseOSC([]byte(tc.input))
+			assert.Equal(t, tc.want, results)
+		})
+	}
+}
