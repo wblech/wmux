@@ -338,6 +338,8 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleRecord(c, frame)
 	case protocol.MsgHistory:
 		d.handleHistory(c, frame)
+	case protocol.MsgKillPrefix:
+		d.handleKillPrefix(c, frame)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -889,6 +891,42 @@ func (d *Daemon) handleExecSync(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	_ = c.Control().WriteFrame(okFrame(ExecSyncResponse{Results: results}))
+}
+
+// handleKillPrefix processes a MsgKillPrefix frame — kills all sessions matching a prefix.
+func (d *Daemon) handleKillPrefix(c ConnectedClient, frame protocol.Frame) {
+	var req KillPrefixRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid kill_prefix request"))
+		return
+	}
+
+	if req.Prefix == "" {
+		_ = c.Control().WriteFrame(errorFrame("prefix is required"))
+		return
+	}
+
+	targets := d.sessionsByPrefix(req.Prefix)
+	if len(targets) == 0 {
+		_ = c.Control().WriteFrame(errorFrame("no sessions match prefix"))
+		return
+	}
+
+	killed := make([]string, 0, len(targets))
+	errs := make(map[string]string)
+
+	for _, sid := range targets {
+		if err := d.sessionSvc.Kill(sid); err != nil {
+			errs[sid] = err.Error()
+		} else {
+			killed = append(killed, sid)
+		}
+	}
+
+	_ = c.Control().WriteFrame(okFrame(KillPrefixResponse{
+		Killed: killed,
+		Errors: errs,
+	}))
 }
 
 // sessionsByPrefix returns session IDs matching the given prefix.

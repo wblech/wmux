@@ -2629,3 +2629,71 @@ func TestDaemon_ListSessions_NoFilter(t *testing.T) {
 	require.NoError(t, json.Unmarshal(listResp.Payload, &sessions))
 	assert.Len(t, sessions, 2)
 }
+
+func TestDaemon_KillPrefix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create sessions.
+	for _, id := range []string{"proj-a/s1", "proj-a/s2", "proj-b/s3"} {
+		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+			ID: id, Shell: "/bin/sh", Cols: 80, Rows: 24,
+		})
+		require.Equal(t, protocol.MsgOK, resp.Type, "create %s", id)
+	}
+
+	// Kill by prefix.
+	killResp := sendControl(t, ctrl, protocol.MsgKillPrefix, KillPrefixRequest{Prefix: "proj-a"})
+	require.Equal(t, protocol.MsgOK, killResp.Type)
+
+	var result KillPrefixResponse
+	require.NoError(t, json.Unmarshal(killResp.Payload, &result))
+	assert.Len(t, result.Killed, 2)
+	assert.Empty(t, result.Errors)
+
+	// Verify only proj-b/s3 remains.
+	listResp := sendControl(t, ctrl, protocol.MsgList, nil)
+	require.Equal(t, protocol.MsgOK, listResp.Type)
+
+	var allSessions []SessionResponse
+	require.NoError(t, json.Unmarshal(listResp.Payload, &allSessions))
+	// Should have 1 alive + 2 exited = 3, but only 1 with alive state.
+	aliveCount := 0
+	for _, s := range allSessions {
+		if s.State == "alive" || s.State == "detached" {
+			aliveCount++
+		}
+	}
+	assert.Equal(t, 1, aliveCount)
+}
+
+func TestDaemon_KillPrefix_NoMatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session with different prefix.
+	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "proj-b/s1", Shell: "/bin/sh", Cols: 80, Rows: 24,
+	})
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	// Kill non-existent prefix → error.
+	killResp := sendControl(t, ctrl, protocol.MsgKillPrefix, KillPrefixRequest{Prefix: "nonexistent"})
+	assert.Equal(t, protocol.MsgError, killResp.Type)
+}
