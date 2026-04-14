@@ -17,9 +17,11 @@ import (
 
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/event"
+	"github.com/wblech/wmux/internal/platform/history"
 	"github.com/wblech/wmux/internal/platform/ipc"
 	"github.com/wblech/wmux/internal/platform/protocol"
 	"github.com/wblech/wmux/internal/platform/pty"
+	"github.com/wblech/wmux/internal/platform/recording"
 	"github.com/wblech/wmux/internal/session"
 	"github.com/wblech/wmux/internal/transport"
 )
@@ -2679,6 +2681,204 @@ func TestDaemon_KillPrefix(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, aliveCount)
+}
+
+// --- scanDA unit tests ---
+
+// spySessionManager is a minimal SessionManager spy for scanDA tests.
+type spySessionManager struct {
+	SessionManager // embed interface for unimplemented methods
+	mu              sync.Mutex
+	writeInputCalls []writeInputCall
+}
+
+type writeInputCall struct {
+	id   string
+	data []byte
+}
+
+func (s *spySessionManager) WriteInput(id string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.writeInputCalls = append(s.writeInputCalls, writeInputCall{id: id, data: data})
+	return nil
+}
+
+// newSpyDaemon builds the minimal Daemon needed by scanDA, with all fields
+// zero-valued to satisfy the exhaustruct linter.
+func newSpyDaemon(spy *spySessionManager, attachments map[string]map[string]struct{}) *Daemon {
+	return &Daemon{
+		mu:                 sync.RWMutex{},
+		server:             nil,
+		sessionSvc:         spy,
+		version:            "",
+		pidFilePath:        "",
+		dataDir:            "",
+		cancelFunc:         nil,
+		attachments:        attachments,
+		clientSession:      map[string]string{},
+		eventBus:           nil,
+		startedAt:          time.Time{},
+		coldRestore:        false,
+		maxScrollbackSize:  0,
+		scrollbackWriters:  map[string]*history.Writer{},
+		waiters:            map[string][]*waiter{},
+		recordings:         map[string]*recording.Writer{},
+		recordingMaxSize:   0,
+		recordingDir:       "",
+		maxHistoryDumpSize: 0,
+	}
+}
+
+func TestDaemon_scanDA_InjectsWhenDetached(t *testing.T) {
+	spy := &spySessionManager{}
+	d := newSpyDaemon(spy, map[string]map[string]struct{}{})
+
+	d.scanDA("s1", []byte("output\x1b[cmore"))
+
+	spy.mu.Lock()
+	calls := spy.writeInputCalls
+	spy.mu.Unlock()
+
+	assert.Len(t, calls, 1)
+	assert.Equal(t, "s1", calls[0].id)
+	assert.Equal(t, DA1Response(), calls[0].data)
+}
+
+func TestDaemon_scanDA_SkipsWhenAttached(t *testing.T) {
+	spy := &spySessionManager{}
+	d := newSpyDaemon(spy, map[string]map[string]struct{}{
+		"s1": {"client-1": {}},
+	})
+
+	d.scanDA("s1", []byte("\x1b[c"))
+
+	spy.mu.Lock()
+	calls := spy.writeInputCalls
+	spy.mu.Unlock()
+
+	assert.Empty(t, calls)
+}
+
+func TestDaemon_scanDA_DA2(t *testing.T) {
+	spy := &spySessionManager{}
+	d := newSpyDaemon(spy, map[string]map[string]struct{}{})
+
+	d.scanDA("s1", []byte("\x1b[>c"))
+
+	spy.mu.Lock()
+	calls := spy.writeInputCalls
+	spy.mu.Unlock()
+
+	assert.Len(t, calls, 1)
+	assert.Equal(t, DA2Response(), calls[0].data)
+}
+
+func TestDaemon_scanDA_BothDA1andDA2(t *testing.T) {
+	spy := &spySessionManager{}
+	d := newSpyDaemon(spy, map[string]map[string]struct{}{})
+
+	d.scanDA("s1", []byte("\x1b[c\x1b[>c"))
+
+	spy.mu.Lock()
+	calls := spy.writeInputCalls
+	spy.mu.Unlock()
+
+	assert.Len(t, calls, 2)
+	assert.Equal(t, DA1Response(), calls[0].data)
+	assert.Equal(t, DA2Response(), calls[1].data)
+}
+
+func TestDaemon_scanDA_NoSequences(t *testing.T) {
+	spy := &spySessionManager{}
+	d := newSpyDaemon(spy, map[string]map[string]struct{}{})
+
+	d.scanDA("s1", []byte("plain text output"))
+
+	spy.mu.Lock()
+	calls := spy.writeInputCalls
+	spy.mu.Unlock()
+
+	assert.Empty(t, calls)
+}
+
+// --- scanOSC unit tests ---
+
+// spyEventBus records published events for inspection in scanOSC unit tests.
+type spyEventBus struct {
+	mu     sync.Mutex
+	events []event.Event
+}
+
+func (b *spyEventBus) Publish(e event.Event) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.events = append(b.events, e)
+}
+
+func (b *spyEventBus) Subscribe() *event.Subscription {
+	return nil
+}
+
+// noopSessionManager implements SessionManager with no-ops, suitable for
+// unit tests that only exercise scanOSC (which only calls MetaSet).
+type noopSessionManager struct{}
+
+func (n *noopSessionManager) Create(_ string, _ SessionCreateOptions) (SessionInfo, error) {
+	return SessionInfo{}, nil
+}
+func (n *noopSessionManager) Get(_ string) (SessionInfo, error)             { return SessionInfo{}, nil }
+func (n *noopSessionManager) List() []SessionInfo                           { return nil }
+func (n *noopSessionManager) Kill(_ string) error                           { return nil }
+func (n *noopSessionManager) Resize(_ string, _, _ int) error               { return nil }
+func (n *noopSessionManager) WriteInput(_ string, _ []byte) error           { return nil }
+func (n *noopSessionManager) ReadOutput(_ string) ([]byte, error)           { return nil, nil }
+func (n *noopSessionManager) Attach(_ string) error                         { return nil }
+func (n *noopSessionManager) Detach(_ string) error                         { return nil }
+func (n *noopSessionManager) Snapshot(_ string) (SnapshotData, error)       { return SnapshotData{}, nil }
+func (n *noopSessionManager) LastActivity(_ string) (time.Time, error)      { return time.Time{}, nil }
+func (n *noopSessionManager) MetaSet(_, _, _ string) error                  { return nil }
+func (n *noopSessionManager) MetaGet(_, _ string) (string, error)           { return "", nil }
+func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error) { return nil, nil }
+func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))         {}
+
+// newScanOSCDaemon creates a minimal Daemon wired with the given event bus,
+// suitable for scanOSC unit tests.
+func newScanOSCDaemon(bus EventBus) *Daemon {
+	return &Daemon{
+		mu:                 sync.RWMutex{},
+		server:             nil,
+		sessionSvc:         &noopSessionManager{},
+		version:            "",
+		pidFilePath:        "",
+		dataDir:            "",
+		cancelFunc:         nil,
+		attachments:        make(map[string]map[string]struct{}),
+		clientSession:      make(map[string]string),
+		eventBus:           bus,
+		startedAt:          time.Time{},
+		coldRestore:        false,
+		maxScrollbackSize:  0,
+		scrollbackWriters:  make(map[string]*history.Writer),
+		waiters:            make(map[string][]*waiter),
+		recordings:         make(map[string]*recording.Writer),
+		recordingMaxSize:   0,
+		recordingDir:       "",
+		maxHistoryDumpSize: 0,
+	}
+}
+
+func TestDaemon_scanOSC_ShellReady(t *testing.T) {
+	bus := &spyEventBus{}
+	d := newScanOSCDaemon(bus)
+
+	data := []byte("\x1b]777;wmux;shell-ready\x1b\\")
+	d.scanOSC("s1", data)
+
+	require.Len(t, bus.events, 1)
+	assert.Equal(t, event.ShellReady, bus.events[0].Type)
+	assert.Equal(t, "s1", bus.events[0].SessionID)
+	assert.Equal(t, map[string]any{}, bus.events[0].Payload)
 }
 
 func TestDaemon_KillPrefix_NoMatch(t *testing.T) {

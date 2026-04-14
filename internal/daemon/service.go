@@ -633,6 +633,7 @@ func (d *Daemon) flushOutput() {
 		}
 
 		d.scanOSC(sessID, data)
+		d.scanDA(sessID, data)
 		d.persistOutput(sessID, data)
 		d.teeRecording(sessID, data)
 		d.notifyOutputWaiters(sessID, data)
@@ -668,6 +669,7 @@ func (d *Daemon) flushOutput() {
 		}
 
 		d.scanOSC(sessID, data)
+		d.scanDA(sessID, data)
 		d.persistOutput(sessID, data)
 		d.teeRecording(sessID, data)
 		d.notifyOutputWaiters(sessID, data)
@@ -755,6 +757,40 @@ func (d *Daemon) scanOSC(sessID string, data []byte) {
 				SessionID: sessID,
 				Payload:   map[string]any{"body": osc.Value},
 			})
+		}
+	}
+}
+
+// scanDA inspects output for DA1/DA2 device attribute requests and, when the
+// session has no attached clients, injects the appropriate response into PTY stdin.
+func (d *Daemon) scanDA(sessID string, data []byte) {
+	requests := ParseDA(data)
+	if len(requests) == 0 {
+		return
+	}
+
+	d.mu.RLock()
+	clientCount := len(d.attachments[sessID])
+	d.mu.RUnlock()
+
+	if clientCount > 0 {
+		return
+	}
+
+	for _, req := range requests {
+		var resp []byte
+
+		switch req.Type {
+		case DATypeDA1:
+			resp = DA1Response()
+		case DATypeDA2:
+			resp = DA2Response()
+		default:
+			continue
+		}
+
+		if err := d.sessionSvc.WriteInput(sessID, resp); err != nil {
+			logErr("scanDA: inject response", err)
 		}
 	}
 }
