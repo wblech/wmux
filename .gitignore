@@ -27,5 +27,9 @@ go.work.sum
 # Docs
 docs/
 
+# Compiled binaries
+/wmux
+/wmux-tmux
+
 # Worktrees
 .worktrees/
