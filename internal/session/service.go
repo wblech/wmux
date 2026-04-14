@@ -174,8 +174,10 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 		buf.Write(data) //nolint:errcheck
 	})
 
+	prefix, _ := ExtractPrefix(id)
 	sess := &Session{
 		ID:        id,
+		Prefix:    prefix,
 		Shell:     opts.Shell,
 		Cwd:       opts.Cwd,
 		State:     StateAlive,

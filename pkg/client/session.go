@@ -163,7 +163,7 @@ func (c *Client) Resize(sessionID string, cols, rows int) error {
 
 // List returns all sessions, optionally filtered by options.
 func (c *Client) List(opts ...ListOption) ([]SessionInfo, error) {
-	cfg := &listConfig{}
+	cfg := &listConfig{prefix: ""}
 	for _, opt := range opts {
 		opt(cfg)
 	}

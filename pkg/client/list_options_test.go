@@ -28,7 +28,7 @@ func TestClient_List_WithPrefix(t *testing.T) {
 
 	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	sessions, err := c.List(WithListPrefix("proj-a"))
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestClient_List_NoOptions(t *testing.T) {
 
 	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	sessions, err := c.List()
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestClient_KillPrefix(t *testing.T) {
 
 	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	result, err := c.KillPrefix("proj-a")
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestClient_KillPrefix_Error(t *testing.T) {
 
 	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	_, err = c.KillPrefix("nonexistent")
 	assert.Error(t, err)

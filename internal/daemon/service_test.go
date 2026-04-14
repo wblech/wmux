@@ -2580,8 +2580,11 @@ func TestDaemon_ListSessions_PrefixFilter(t *testing.T) {
 		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 			ID:    id,
 			Shell: "/bin/sh",
+			Args:  nil,
 			Cols:  80,
 			Rows:  24,
+			Cwd:   "",
+			Env:   nil,
 		})
 		require.Equal(t, protocol.MsgOK, resp.Type, "create %s", id)
 	}
@@ -2615,8 +2618,11 @@ func TestDaemon_ListSessions_NoFilter(t *testing.T) {
 		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
 			ID:    id,
 			Shell: "/bin/sh",
+			Args:  nil,
 			Cols:  80,
 			Rows:  24,
+			Cwd:   "",
+			Env:   nil,
 		})
 		require.Equal(t, protocol.MsgOK, resp.Type)
 	}
@@ -2645,7 +2651,7 @@ func TestDaemon_KillPrefix(t *testing.T) {
 	// Create sessions.
 	for _, id := range []string{"proj-a/s1", "proj-a/s2", "proj-b/s3"} {
 		resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
-			ID: id, Shell: "/bin/sh", Cols: 80, Rows: 24,
+			ID: id, Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
 		})
 		require.Equal(t, protocol.MsgOK, resp.Type, "create %s", id)
 	}
@@ -2689,7 +2695,7 @@ func TestDaemon_KillPrefix_NoMatch(t *testing.T) {
 
 	// Create a session with different prefix.
 	resp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
-		ID: "proj-b/s1", Shell: "/bin/sh", Cols: 80, Rows: 24,
+		ID: "proj-b/s1", Shell: "/bin/sh", Args: nil, Cols: 80, Rows: 24, Cwd: "", Env: nil,
 	})
 	require.Equal(t, protocol.MsgOK, resp.Type)
 
