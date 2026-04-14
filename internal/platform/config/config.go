@@ -41,6 +41,12 @@ type HistoryConfig struct {
 	MaxTotal      string `koanf:"max_total"`
 	Recording     bool   `koanf:"recording"`
 	ColdRestore   bool   `koanf:"cold_restore"`
+	MaxDumpSize   string `koanf:"max_dump_size"`
+}
+
+// RecordingConfig holds session recording settings.
+type RecordingConfig struct {
+	MaxFileSize string `koanf:"max_file_size"`
 }
 
 // BackpressureConfig holds backpressure flow control settings.
@@ -94,6 +100,7 @@ type Config struct {
 	Shell        ShellConfig        `koanf:"shell"`
 	Watchdog     WatchdogConfig     `koanf:"watchdog"`
 	Resize       ResizeConfig       `koanf:"resize"`
+	Recording    RecordingConfig    `koanf:"recording"`
 }
 
 // Defaults returns a Config populated with all PRD-specified default values.
@@ -117,6 +124,7 @@ func Defaults() *Config {
 			MaxTotal:      "0",
 			Recording:     false,
 			ColdRestore:   false,
+			MaxDumpSize:   "10MB",
 		},
 		Backpressure: BackpressureConfig{
 			HighWatermark: "1MB",
@@ -142,6 +150,9 @@ func Defaults() *Config {
 		},
 		Resize: ResizeConfig{
 			Strategy: "leader",
+		},
+		Recording: RecordingConfig{
+			MaxFileSize: "50MB",
 		},
 	}
 }
