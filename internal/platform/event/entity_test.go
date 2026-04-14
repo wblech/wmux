@@ -43,6 +43,10 @@ func TestType_String_Phase2(t *testing.T) {
 	}
 }
 
+func TestType_String_ShellReady(t *testing.T) {
+	assert.Equal(t, "shell.ready", ShellReady.String())
+}
+
 func TestEvent_Fields(t *testing.T) {
 	e := Event{
 		Type:      SessionCreated,

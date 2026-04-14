@@ -31,6 +31,8 @@ const (
 	OutputFlood
 	// RecordingLimitReached is emitted when a recording file size limit is exceeded.
 	RecordingLimitReached
+	// ShellReady is emitted when a session's shell signals readiness via OSC marker.
+	ShellReady
 )
 
 // String returns the dot-notation name of the event type.
@@ -58,6 +60,8 @@ func (t Type) String() string {
 		return "output.flood"
 	case RecordingLimitReached:
 		return "recording.limit_reached"
+	case ShellReady:
+		return "shell.ready"
 	default:
 		return "unknown"
 	}
