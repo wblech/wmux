@@ -1,0 +1,85 @@
+site_name: wmux
+site_url: https://wblech.github.io/wmux
+site_description: Lightweight, cross-platform PTY daemon for persistent terminal sessions
+repo_url: https://github.com/wblech/wmux
+repo_name: wblech/wmux
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+  palette:
+    - scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+exclude_docs: |
+  roadmap/
+  decisions/
+  superpowers/
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - getting-started/index.md
+    - Configuration: getting-started/configuration.md
+  - CLI Reference:
+    - cli/index.md
+    - wmux: cli/wmux.md
+    - wmux-tmux: cli/wmux-tmux.md
+  - Go SDK:
+    - integration/index.md
+    - Embedded Daemon: integration/embedded-daemon.md
+    - Persistent Daemon: integration/persistent-daemon.md
+    - Session Operations: integration/session-operations.md
+    - Events: integration/events.md
+  - Architecture:
+    - architecture/index.md
+    - Domain Packages: architecture/domains.md
+
+plugins:
+  - search
+  - llmstxt:
+      full_output: llms-full.txt
+      sections:
+        Getting Started:
+          - getting-started/index.md
+          - getting-started/configuration.md
+        CLI Reference:
+          - cli/index.md
+          - cli/wmux.md
+          - cli/wmux-tmux.md
+        Go SDK:
+          - integration/index.md
+          - integration/embedded-daemon.md
+          - integration/persistent-daemon.md
+          - integration/session-operations.md
+          - integration/events.md
+        Architecture:
+          - architecture/index.md
+          - architecture/domains.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true

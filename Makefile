@@ -1,4 +1,4 @@
-.PHONY: lint test generate deps
+.PHONY: lint test generate deps docs docs-serve
 
 lint:
 	golangci-lint run && goframe check
@@ -11,3 +11,9 @@ generate:
 
 deps:
 	go mod tidy
+
+docs:
+	mkdocs build --strict
+
+docs-serve:
+	mkdocs serve

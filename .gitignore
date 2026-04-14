@@ -24,8 +24,13 @@ go.work.sum
 *.swp
 *.swo
 
-# Docs
-docs/
+# Docs (internal planning — not published)
+docs/roadmap/
+docs/decisions/
+docs/superpowers/
+
+# MkDocs build output
+site/
 
 # Compiled binaries
 /wmux
