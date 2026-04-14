@@ -36,6 +36,10 @@ site/
 /wmux
 /wmux-tmux
 
+# Claude settings
+.claude/settings.json
+.claude/settings.local.json
+
 # BMAD skills
 _bmad/
 .claude/skills/bmad*/
