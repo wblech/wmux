@@ -65,6 +65,8 @@ type ScreenEmulator interface {
 type Session struct {
 	// ID is the unique identifier for the session.
 	ID string
+	// Prefix is the optional namespace prefix extracted from the session ID.
+	Prefix string
 	// State is the current lifecycle state of the session.
 	State State
 	// Pid is the process ID of the shell running inside the session.
@@ -103,4 +105,6 @@ var (
 	ErrBufferFull = errors.New("session buffer full")
 	// ErrSessionNotAlive is returned when trying to attach to a non-alive session.
 	ErrSessionNotAlive = errors.New("session not alive or detached")
+	// ErrInvalidPrefix is returned when a session prefix fails validation.
+	ErrInvalidPrefix = errors.New("invalid session prefix")
 )
