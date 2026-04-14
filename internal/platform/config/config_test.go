@@ -197,6 +197,16 @@ func TestDefaults_ColdRestoreFalse(t *testing.T) {
 	assert.False(t, cfg.History.ColdRestore)
 }
 
+func TestDefaults_RecordingConfig(t *testing.T) {
+	cfg := Defaults()
+	assert.Equal(t, "50MB", cfg.Recording.MaxFileSize)
+}
+
+func TestDefaults_HistoryDumpConfig(t *testing.T) {
+	cfg := Defaults()
+	assert.Equal(t, "10MB", cfg.History.MaxDumpSize)
+}
+
 func TestLoad_FileNotFound(t *testing.T) {
 	_, err := Load("/nonexistent/path/wmux.toml")
 	require.Error(t, err)

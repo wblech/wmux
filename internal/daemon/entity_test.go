@@ -158,6 +158,80 @@ func TestWaitResponse_Timeout_JSON(t *testing.T) {
 	assert.Nil(t, decoded.ExitCode)
 }
 
+func TestRecordRequest_JSON(t *testing.T) {
+	req := RecordRequest{
+		SessionID: "my-session",
+		Action:    "start",
+	}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+
+	var decoded RecordRequest
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, req, decoded)
+}
+
+func TestRecordRequest_Stop_JSON(t *testing.T) {
+	req := RecordRequest{
+		SessionID: "my-session",
+		Action:    "stop",
+	}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+
+	var decoded RecordRequest
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, "stop", decoded.Action)
+}
+
+func TestRecordResponse_JSON(t *testing.T) {
+	resp := RecordResponse{
+		SessionID: "my-session",
+		Recording: true,
+		Path:      "/tmp/wmux/my-session/recording-20260413T120000.cast",
+	}
+	data, err := json.Marshal(resp)
+	require.NoError(t, err)
+
+	var decoded RecordResponse
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, resp, decoded)
+}
+
+func TestHistoryRequest_JSON(t *testing.T) {
+	req := HistoryRequest{
+		SessionID: "my-session",
+		Format:    "html",
+		Lines:     500,
+	}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+
+	var decoded HistoryRequest
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, req, decoded)
+}
+
+func TestHistoryRequest_Defaults_JSON(t *testing.T) {
+	req := HistoryRequest{
+		SessionID: "s1",
+		Format:    "ansi",
+		Lines:     0,
+	}
+	data, err := json.Marshal(req)
+	require.NoError(t, err)
+
+	var decoded HistoryRequest
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, "ansi", decoded.Format)
+	assert.Equal(t, 0, decoded.Lines)
+}
+
 func TestSentinelErrors(t *testing.T) {
 	assert.NotEqual(t, ErrDaemonRunning.Error(), ErrDaemonNotRunning.Error())
 	assert.NotEqual(t, ErrAlreadyAttached.Error(), ErrNotAttached.Error())

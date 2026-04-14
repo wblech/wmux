@@ -159,6 +159,26 @@ type WaitResponse struct {
 	TimedOut  bool   `json:"timed_out"`
 }
 
+// RecordRequest is the JSON payload for MsgRecord.
+type RecordRequest struct {
+	SessionID string `json:"session_id"`
+	Action    string `json:"action"` // "start" or "stop"
+}
+
+// RecordResponse is the JSON payload for MsgRecord responses.
+type RecordResponse struct {
+	SessionID string `json:"session_id"`
+	Recording bool   `json:"recording"`
+	Path      string `json:"path,omitempty"`
+}
+
+// HistoryRequest is the JSON payload for MsgHistory.
+type HistoryRequest struct {
+	SessionID string `json:"session_id"`
+	Format    string `json:"format"`         // "ansi", "text", "html"
+	Lines     int    `json:"lines,omitempty"` // 0 = all available
+}
+
 // Sentinel errors for daemon operations.
 var (
 	// ErrDaemonRunning is returned when trying to start a daemon that is already running.
