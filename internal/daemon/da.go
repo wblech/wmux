@@ -6,7 +6,9 @@ import "bytes"
 type DAType int
 
 const (
+	// DATypeDA1 is a primary device attributes request (ESC[c or ESC[0c).
 	DATypeDA1 DAType = iota + 1
+	// DATypeDA2 is a secondary device attributes request (ESC[>c or ESC[>0c).
 	DATypeDA2
 )
 

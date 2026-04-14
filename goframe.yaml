@@ -7,6 +7,7 @@ allow:
   - "internal/daemon/reconcile.go"
   - "internal/daemon/shutdown.go"
   - "internal/daemon/osc.go"
+  - "internal/daemon/da.go"
   - "internal/daemon/environment.go"
   - "internal/session/emulator.go"
   - "internal/session/addon_emulator.go"
