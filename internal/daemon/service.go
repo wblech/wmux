@@ -757,6 +757,12 @@ func (d *Daemon) scanOSC(sessID string, data []byte) {
 				SessionID: sessID,
 				Payload:   map[string]any{"body": osc.Value},
 			})
+		case OSCTypeShellReady:
+			d.publishEvent(event.Event{
+				Type:      event.ShellReady,
+				SessionID: sessID,
+				Payload:   map[string]any{},
+			})
 		}
 	}
 }
