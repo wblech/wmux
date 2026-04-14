@@ -36,5 +36,9 @@ site/
 /wmux
 /wmux-tmux
 
+# BMAD skills
+_bmad/
+.claude/skills/bmad*/
+
 # Worktrees
 .worktrees/
