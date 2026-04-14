@@ -6,6 +6,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/wblech/wmux/pkg/client"
@@ -61,7 +62,11 @@ func newClient() (*client.Client, error) {
 		opts = append(opts, client.WithNamespace(ns))
 	}
 
-	return client.New(opts...)
+	c, err := client.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("wmux-tmux: connect: %w", err)
+	}
+	return c, nil
 }
 
 // cmdNewSession: tmux new-session -d -s NAME [-x COLS] [-y ROWS]
@@ -86,14 +91,20 @@ func cmdNewSession(args []string) int {
 			}
 		case "-x":
 			if i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &cols)
+				v, err := strconv.Atoi(args[i+1])
+				if err == nil {
+					cols = v
+				}
 				i += 2
 			} else {
 				i++
 			}
 		case "-y":
 			if i+1 < len(args) {
-				fmt.Sscanf(args[i+1], "%d", &rows)
+				v, err := strconv.Atoi(args[i+1])
+				if err == nil {
+					rows = v
+				}
 				i += 2
 			} else {
 				i++
