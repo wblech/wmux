@@ -64,8 +64,9 @@ func main() {
 ```
 
 The client communicates with the daemon over a Unix socket using a
-length-prefixed binary protocol. Authentication is handled automatically via a
-shared token file.
+length-prefixed binary protocol with two channels: **control** for RPCs
+(create, resize, list) and **stream** for PTY output. Both channels are
+authenticated automatically via a shared token file.
 
 Two deployment modes are available:
 
