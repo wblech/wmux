@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -900,4 +901,50 @@ func TestClient_Info_Error(t *testing.T) {
 
 	_, err = c.Info("nonexistent")
 	require.Error(t, err)
+}
+
+func TestClient_StreamDataDelivery(t *testing.T) {
+	socketPath, tokenPath, mock, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgAttach: func(_ []byte) protocol.Frame {
+			return okFrame(struct {
+				ID    string `json:"id"`
+				State string `json:"state"`
+			}{ID: "s1", State: "attached"})
+		},
+	})
+	defer cleanup()
+
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	received := make(chan struct {
+		sessionID string
+		data      []byte
+	}, 1)
+
+	c.OnData(func(sessionID string, data []byte) {
+		received <- struct {
+			sessionID string
+			data      []byte
+		}{sessionID: sessionID, data: data}
+	})
+
+	// Send MsgData on the stream channel from the mock server.
+	dataPayload := []byte{2, 's', '1'}
+	dataPayload = append(dataPayload, []byte("hello world")...)
+	err = mock.streamConn.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgData,
+		Payload: dataPayload,
+	})
+	require.NoError(t, err)
+
+	select {
+	case msg := <-received:
+		assert.Equal(t, "s1", msg.sessionID)
+		assert.Equal(t, []byte("hello world"), msg.data)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for data callback")
+	}
 }
