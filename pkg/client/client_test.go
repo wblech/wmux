@@ -903,6 +903,204 @@ func TestClient_Info_Error(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestClient_EventDelivery(t *testing.T) {
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "d.sock")
+	tokenPath := filepath.Join(dir, "d.token")
+
+	token, err := auth.Generate()
+	require.NoError(t, err)
+	require.NoError(t, auth.SaveToFile(token, tokenPath))
+
+	ln, err := net.Listen("unix", socketPath)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+	var ctrlConn *protocol.Conn
+
+	go func() {
+		// Accept control.
+		raw, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		pConn := protocol.NewConn(raw)
+		frame, _ := pConn.ReadFrame()
+		if frame.Type == protocol.MsgAuth && auth.Verify(token, frame.Payload[1:1+auth.TokenSize]) {
+			_ = pConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: []byte("evt-client"),
+			})
+		}
+		ctrlConn = pConn
+
+		// Accept stream.
+		sRaw, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		sPConn := protocol.NewConn(sRaw)
+		sFrame, _ := sPConn.ReadFrame()
+		if sFrame.Type == protocol.MsgAuth {
+			_ = sPConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: nil,
+			})
+		}
+
+		<-done
+		_ = raw.Close()
+		_ = sRaw.Close()
+	}()
+
+	defer func() {
+		close(done)
+		_ = ln.Close()
+	}()
+
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	received := make(chan Event, 1)
+	c.OnEvent(func(evt Event) {
+		received <- evt
+	})
+
+	// Server pushes an event on the control channel.
+	evtPayload, _ := json.Marshal(Event{
+		Type:      "session.created",
+		SessionID: "s1",
+		Data:      nil,
+	})
+	require.NotNil(t, ctrlConn)
+	err = ctrlConn.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgEvent,
+		Payload: evtPayload,
+	})
+	require.NoError(t, err)
+
+	select {
+	case evt := <-received:
+		assert.Equal(t, "session.created", evt.Type)
+		assert.Equal(t, "s1", evt.SessionID)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for event callback")
+	}
+}
+
+func TestClient_EventDoesNotCorruptRPC(t *testing.T) {
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "d.sock")
+	tokenPath := filepath.Join(dir, "d.token")
+
+	token, err := auth.Generate()
+	require.NoError(t, err)
+	require.NoError(t, auth.SaveToFile(token, tokenPath))
+
+	ln, err := net.Listen("unix", socketPath)
+	require.NoError(t, err)
+
+	done := make(chan struct{})
+
+	go func() {
+		// Accept control.
+		raw, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		pConn := protocol.NewConn(raw)
+		frame, _ := pConn.ReadFrame()
+		if frame.Type == protocol.MsgAuth {
+			_ = pConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: []byte("rpc-client"),
+			})
+		}
+
+		// Accept stream.
+		sRaw, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		sPConn := protocol.NewConn(sRaw)
+		sFrame, _ := sPConn.ReadFrame()
+		if sFrame.Type == protocol.MsgAuth {
+			_ = sPConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: nil,
+			})
+		}
+
+		// Dispatch loop: for each incoming request, push an event THEN the response.
+		for {
+			select {
+			case <-done:
+				_ = raw.Close()
+				_ = sRaw.Close()
+				return
+			default:
+			}
+
+			frame, err := pConn.ReadFrame()
+			if err != nil {
+				return
+			}
+
+			// Push a sneaky event before the RPC response.
+			evtPayload, _ := json.Marshal(Event{
+				Type:      "session.created",
+				SessionID: "sneaky",
+				Data:      nil,
+			})
+			_ = pConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgEvent,
+				Payload: evtPayload,
+			})
+
+			// Now send the actual RPC response.
+			if frame.Type == protocol.MsgList {
+				resp, _ := json.Marshal([]SessionInfo{{ID: "s1", State: "alive"}})
+				_ = pConn.WriteFrame(protocol.Frame{
+					Version: protocol.ProtocolVersion,
+					Type:    protocol.MsgOK,
+					Payload: resp,
+				})
+			}
+		}
+	}()
+
+	defer func() {
+		close(done)
+		_ = ln.Close()
+	}()
+
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	eventCount := 0
+	c.OnEvent(func(_ Event) {
+		eventCount++
+	})
+
+	// Make an RPC — the server will push an event before responding.
+	sessions, err := c.List()
+	require.NoError(t, err)
+	assert.Len(t, sessions, 1)
+	assert.Equal(t, "s1", sessions[0].ID)
+
+	// Give the event goroutine a moment to dispatch.
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, 1, eventCount, "event should have been delivered despite interleaving")
+}
+
 func TestClient_StreamDataDelivery(t *testing.T) {
 	socketPath, tokenPath, mock, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgAttach: func(_ []byte) protocol.Frame {
