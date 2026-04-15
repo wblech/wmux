@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended by [0020](0020-client-auto-subscribe.md)
 date: 2026-04-13
 decision-makers: wblech
 ---
