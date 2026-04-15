@@ -1562,19 +1562,21 @@ func TestDaemon_ColdRestore_Enabled_ExitUpdatesMetadata(t *testing.T) {
 	})
 	require.Equal(t, protocol.MsgOK, resp.Type)
 
-	// Kill the session and wait for the SessionExited event.
+	// Subscribe before kill so we don't miss the event.
+	sub := eb.bus.SubscribeTypes(event.SessionExited)
+	defer sub.Unsubscribe()
+
 	killResp := sendControl(t, ctrl, protocol.MsgKill, SessionIDRequest{SessionID: "cold-exit"})
 	require.Equal(t, protocol.MsgOK, killResp.Type)
 
 	sessionDir := filepath.Join(dataDir, "cold-exit")
-	require.Eventually(t, func() bool {
-		for _, evt := range eb.Events() {
-			if evt.Type == event.SessionExited && evt.SessionID == "cold-exit" {
-				return true
-			}
-		}
-		return false
-	}, 3*time.Second, 50*time.Millisecond, "should receive SessionExited event")
+	select {
+	case evt := <-sub.Events():
+		require.Equal(t, event.SessionExited, evt.Type)
+		require.Equal(t, "cold-exit", evt.SessionID)
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for SessionExited event")
+	}
 
 	metaData, err := os.ReadFile(filepath.Join(sessionDir, "meta.json"))
 	require.NoError(t, err)
