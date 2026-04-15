@@ -136,7 +136,7 @@ func (c *Client) History(sessionID, format string, lines int) (io.ReadCloser, er
 	}
 
 	return &historyReader{
-		conn:     c.pConn,
+		conn:     c.ctrl,
 		initial:  resp.Payload,
 		done:     false,
 		buf:      nil,

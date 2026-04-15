@@ -18,9 +18,20 @@ import (
 
 // Client is a connection to a wmux daemon.
 type Client struct {
-	mu          sync.Mutex
-	conn        net.Conn
-	pConn       *protocol.Conn
+	mu    sync.Mutex // protects handler fields
+	rpcMu sync.Mutex // serializes RPC write+wait pairs
+
+	clientID string
+
+	ctrlConn   net.Conn
+	ctrl       *protocol.Conn
+	streamConn net.Conn
+	stream     *protocol.Conn
+
+	done      chan struct{}
+	responses chan protocol.Frame
+	history   chan protocol.Frame
+
 	dataHandler func(sessionID string, data []byte)
 	evtHandler  func(Event)
 }
@@ -128,60 +139,91 @@ func connect(cfg *config) (*Client, error) {
 		return nil, fmt.Errorf("client: read token: %w", err)
 	}
 
-	conn, err := net.Dial("unix", cfg.socket)
+	// Step 1: open control channel.
+	ctrlConn, err := net.Dial("unix", cfg.socket)
 	if err != nil {
-		return nil, fmt.Errorf("client: dial: %w", err)
+		return nil, fmt.Errorf("client: dial control: %w", err)
 	}
 
-	pConn := protocol.NewConn(conn)
+	ctrl := protocol.NewConn(ctrlConn)
 
 	payload := make([]byte, 0, 1+auth.TokenSize)
 	payload = append(payload, byte(transport.ChannelControl))
 	payload = append(payload, token...)
 
-	if err := pConn.WriteFrame(protocol.Frame{
+	if err := ctrl.WriteFrame(protocol.Frame{
 		Version: protocol.ProtocolVersion,
 		Type:    protocol.MsgAuth,
 		Payload: payload,
 	}); err != nil {
-		_ = conn.Close()
+		_ = ctrlConn.Close()
 		return nil, fmt.Errorf("client: auth write: %w", err)
 	}
 
-	frame, err := pConn.ReadFrame()
+	frame, err := ctrl.ReadFrame()
 	if err != nil {
-		_ = conn.Close()
+		_ = ctrlConn.Close()
 		return nil, fmt.Errorf("client: auth read: %w", err)
 	}
 
 	if frame.Type != protocol.MsgOK {
-		_ = conn.Close()
+		_ = ctrlConn.Close()
 		return nil, fmt.Errorf("client: auth failed")
 	}
 
-	return &Client{
+	clientID := string(frame.Payload)
+
+	// Step 2: open stream channel.
+	streamConn, err := dialStream(cfg.socket, token, clientID)
+	if err != nil {
+		_ = ctrlConn.Close()
+		return nil, fmt.Errorf("client: stream: %w", err)
+	}
+
+	c := &Client{
 		mu:          sync.Mutex{},
-		conn:        conn,
-		pConn:       pConn,
+		rpcMu:       sync.Mutex{},
+		clientID:    clientID,
+		ctrlConn:    ctrlConn,
+		ctrl:        ctrl,
+		streamConn:  streamConn,
+		stream:      protocol.NewConn(streamConn),
+		done:        make(chan struct{}),
+		responses:   make(chan protocol.Frame, 1),
+		history:     make(chan protocol.Frame, 4),
 		dataHandler: nil,
 		evtHandler:  nil,
-	}, nil
+	}
+
+	// Step 3: spawn reader goroutines.
+	go c.readStream()
+	go c.readControl()
+
+	return c, nil
 }
 
-// Close closes the connection to the daemon.
+// Close closes both connections to the daemon.
 func (c *Client) Close() error {
-	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("client: close: %w", err)
+	close(c.done)
+
+	ctrlErr := c.ctrlConn.Close()
+	streamErr := c.streamConn.Close()
+
+	if ctrlErr != nil {
+		return fmt.Errorf("client: close control: %w", ctrlErr)
+	}
+	if streamErr != nil {
+		return fmt.Errorf("client: close stream: %w", streamErr)
 	}
 	return nil
 }
 
-// sendRequest sends a control frame and reads the response.
+// sendRequest sends a control frame and waits for the demuxed response.
 func (c *Client) sendRequest(msgType protocol.MessageType, payload []byte) (protocol.Frame, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.rpcMu.Lock()
+	defer c.rpcMu.Unlock()
 
-	if err := c.pConn.WriteFrame(protocol.Frame{
+	if err := c.ctrl.WriteFrame(protocol.Frame{
 		Version: protocol.ProtocolVersion,
 		Type:    msgType,
 		Payload: payload,
@@ -189,9 +231,9 @@ func (c *Client) sendRequest(msgType protocol.MessageType, payload []byte) (prot
 		return protocol.Frame{}, fmt.Errorf("client: write: %w", err)
 	}
 
-	resp, err := c.pConn.ReadFrame()
-	if err != nil {
-		return protocol.Frame{}, fmt.Errorf("client: read: %w", err)
+	resp, ok := <-c.responses
+	if !ok {
+		return protocol.Frame{}, fmt.Errorf("client: connection closed")
 	}
 
 	return resp, nil
