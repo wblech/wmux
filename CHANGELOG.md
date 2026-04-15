@@ -2,6 +2,32 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.2](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.2) - 2026-04-15
+
+### Bug Fixes
+
+- HistoryReader reads from demuxed channel instead of raw conn
+- Address race condition and lint issues from stream channel implementation
+
+### Documentation
+
+- Update IPC description to reflect dual-channel client
+
+### Features
+
+- Add decodeDataPayload to pkg/client
+- Implement client stream channel and control demux
+
+### Refactoring
+
+- Update Client struct for dual-channel architecture
+- Update mock server for dual-channel client tests
+
+### Testing
+
+- Verify stream data delivery to OnData handler
+- Verify event delivery and RPC/event interleaving
+
 ## [0.1.0-beta.1](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.1) - 2026-04-15
 
 ### Bug Fixes
