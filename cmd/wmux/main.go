@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/wblech/wmux/internal/platform/auth"
+	"github.com/wblech/wmux/internal/platform/buildinfo"
 	"github.com/wblech/wmux/internal/platform/protocol"
 	"github.com/wblech/wmux/internal/transport"
 )
@@ -62,6 +63,8 @@ func main() {
 		exitCode = cmdRecord(args)
 	case "history":
 		exitCode = cmdHistory(args)
+	case "version":
+		exitCode = cmdVersion()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", cmd)
 		printUsage()
@@ -125,6 +128,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  record    Start or stop session recording")
 	fmt.Fprintln(os.Stderr, "  history   Export session scrollback history")
 	fmt.Fprintln(os.Stderr, "  events    Stream session events")
+	fmt.Fprintln(os.Stderr, "  version   Show wmux version")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags:")
 	fmt.Fprintln(os.Stderr, "  --socket <path>  Daemon socket path (default: ~/.wmux/daemon.sock)")
@@ -1245,5 +1249,10 @@ func printExecSyncResults(resp protocol.Frame) int {
 	if hasError {
 		return 1
 	}
+	return 0
+}
+
+func cmdVersion() int {
+	fmt.Printf("wmux %s (commit: %s)\n", buildinfo.Version, buildinfo.Commit)
 	return 0
 }
