@@ -5,6 +5,7 @@ import (
 	"io"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/wblech/wmux/internal/platform/pty"
@@ -261,6 +262,13 @@ func (s *Service) Kill(id string) error {
 	s.mu.Unlock()
 
 	ms.batcher.Stop()
+	// Send SIGHUP to the process group so the process exits on Linux
+	// (closing the PTY fd alone is not sufficient on all platforms).
+	// Use Signal directly to avoid the Wait() in process.Kill() which
+	// races with waitLoop.
+	if pgid, err := syscall.Getpgid(ms.process.Pid()); err == nil {
+		_ = syscall.Kill(-pgid, syscall.SIGHUP)
+	}
 	ms.closeOnce.Do(func() {
 		ms.process.Close() //nolint:errcheck
 	})
