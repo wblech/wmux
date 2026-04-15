@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: amended by [0019](0019-control-channel-events.md)
 date: 2026-04-11
 decision-makers: wblech
 ---
