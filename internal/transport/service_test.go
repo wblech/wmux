@@ -576,6 +576,50 @@ func TestServer_ChildrenMode(t *testing.T) {
 	assert.True(t, resp.Type == protocol.MsgOK || resp.Type == protocol.MsgError)
 }
 
+// TestServer_AutomationModeReject_SendsProtocolError verifies that when
+// checkAutomationMode rejects a connection, the client receives a MsgError
+// frame instead of a broken pipe.
+//
+// BUG: handleConn calls checkAutomationMode BEFORE ReadFrame. If the check
+// fails, the server closes the raw conn before the client can send or read
+// anything. The client gets a broken pipe on WriteFrame instead of a clean
+// MsgError. This test uses an invalid AutomationMode to force rejection on
+// any OS (the ModeChildren path only rejects on Linux CI, not macOS).
+func TestServer_AutomationModeReject_SendsProtocolError(t *testing.T) {
+	// AutomationMode(99) hits the default branch which always rejects.
+	srv, token, sock := testServer(t, WithAutomationMode(AutomationMode(99)))
+	cancel := startServer(t, srv)
+	defer cancel()
+
+	raw, err := net.Dial("unix", sock)
+	require.NoError(t, err)
+
+	conn := protocol.NewConn(raw)
+	defer conn.Close() //nolint:errcheck
+
+	// Give the server time to run checkAutomationMode and close the conn.
+	// The bug: the server closes before ReadFrame, so the client's write
+	// races with the close. This sleep ensures the server has already closed.
+	time.Sleep(50 * time.Millisecond)
+
+	payload := make([]byte, minAuthPayloadSize)
+	payload[0] = byte(ChannelControl)
+	copy(payload[1:], token)
+
+	// The client must be able to send the auth frame without broken pipe.
+	err = conn.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgAuth,
+		Payload: payload,
+	})
+	require.NoError(t, err, "server closed conn before client could send auth frame (broken pipe)")
+
+	// The server must reply with a protocol-level MsgError, not a raw conn close.
+	resp, err := conn.ReadFrame()
+	require.NoError(t, err, "server closed conn without sending MsgError response")
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
 func TestServer_StreamShortPayloadAfterToken(t *testing.T) {
 	srv, token, sock := testServer(t)
 	cancel := startServer(t, srv)

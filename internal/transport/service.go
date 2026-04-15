@@ -131,13 +131,6 @@ func (s *Server) handleConn(raw net.Conn) {
 		return
 	}
 
-	if err = s.checkAutomationMode(raw, creds); err != nil {
-		conn := protocol.NewConn(raw)
-		sendError(conn, ErrAuthFailed.Error())
-		_ = raw.Close()
-		return
-	}
-
 	conn := protocol.NewConn(raw)
 
 	frame, err := conn.ReadFrame()
@@ -163,6 +156,12 @@ func (s *Server) handleConn(raw net.Conn) {
 	tokenBytes := frame.Payload[1 : 1+auth.TokenSize]
 
 	if !auth.Verify(s.token, tokenBytes) {
+		sendError(conn, ErrAuthFailed.Error())
+		_ = raw.Close()
+		return
+	}
+
+	if err = s.checkAutomationMode(raw, creds); err != nil {
 		sendError(conn, ErrAuthFailed.Error())
 		_ = raw.Close()
 		return
