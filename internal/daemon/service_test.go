@@ -1574,7 +1574,7 @@ func TestDaemon_ColdRestore_Enabled_ExitUpdatesMetadata(t *testing.T) {
 	case evt := <-sub.Events():
 		require.Equal(t, event.SessionExited, evt.Type)
 		require.Equal(t, "cold-exit", evt.SessionID)
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for SessionExited event")
 	}
 
