@@ -836,6 +836,16 @@ func TestClient_EventDelivery(t *testing.T) {
 			})
 		}
 
+		// Handle subscribe RPC from connect().
+		subFrame, _ := pConn.ReadFrame()
+		if subFrame.Type == protocol.MsgEvent {
+			_ = pConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: nil,
+			})
+		}
+
 		<-done
 		_ = raw.Close()
 		_ = sRaw.Close()
@@ -938,20 +948,27 @@ func TestClient_EventDoesNotCorruptRPC(t *testing.T) {
 				return
 			}
 
-			// Push a sneaky event before the RPC response.
-			evtPayload, _ := json.Marshal(Event{
-				Type:      "session.created",
-				SessionID: "sneaky",
-				Data:      nil,
-			})
-			_ = pConn.WriteFrame(protocol.Frame{
-				Version: protocol.ProtocolVersion,
-				Type:    protocol.MsgEvent,
-				Payload: evtPayload,
-			})
+			switch frame.Type {
+			case protocol.MsgEvent:
+				// Subscribe RPC from connect() — ack immediately.
+				_ = pConn.WriteFrame(protocol.Frame{
+					Version: protocol.ProtocolVersion,
+					Type:    protocol.MsgOK,
+					Payload: nil,
+				})
+			case protocol.MsgList:
+				// Push a sneaky event before the RPC response.
+				evtPayload, _ := json.Marshal(Event{
+					Type:      "session.created",
+					SessionID: "sneaky",
+					Data:      nil,
+				})
+				_ = pConn.WriteFrame(protocol.Frame{
+					Version: protocol.ProtocolVersion,
+					Type:    protocol.MsgEvent,
+					Payload: evtPayload,
+				})
 
-			// Now send the actual RPC response.
-			if frame.Type == protocol.MsgList {
 				resp, _ := json.Marshal([]SessionInfo{{ID: "s1", State: "alive", Pid: 0, Cols: 0, Rows: 0, Shell: ""}})
 				_ = pConn.WriteFrame(protocol.Frame{
 					Version: protocol.ProtocolVersion,

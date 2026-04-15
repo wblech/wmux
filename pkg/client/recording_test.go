@@ -183,6 +183,9 @@ func TestClient_History(t *testing.T) {
 	historyData := []byte("hello world scrollback data")
 
 	socketPath, tokenPath, cleanup := startStreamingMockServer(t, func(msgType protocol.MessageType, _ []byte) []protocol.Frame {
+		if msgType == protocol.MsgEvent {
+			return []protocol.Frame{{Version: protocol.ProtocolVersion, Type: protocol.MsgOK, Payload: nil}}
+		}
 		if msgType == protocol.MsgHistory {
 			return []protocol.Frame{
 				{Version: protocol.ProtocolVersion, Type: protocol.MsgHistory, Payload: historyData},
@@ -208,6 +211,9 @@ func TestClient_History(t *testing.T) {
 
 func TestClient_History_Empty(t *testing.T) {
 	socketPath, tokenPath, cleanup := startStreamingMockServer(t, func(msgType protocol.MessageType, _ []byte) []protocol.Frame {
+		if msgType == protocol.MsgEvent {
+			return []protocol.Frame{{Version: protocol.ProtocolVersion, Type: protocol.MsgOK, Payload: nil}}
+		}
 		if msgType == protocol.MsgHistory {
 			return []protocol.Frame{
 				{Version: protocol.ProtocolVersion, Type: protocol.MsgHistoryEnd, Payload: nil},

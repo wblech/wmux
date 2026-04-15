@@ -199,6 +199,12 @@ func connect(cfg *config) (*Client, error) {
 	go c.readStream()
 	go c.readControl()
 
+	// Step 4: subscribe to daemon events (standard RPC via readers).
+	if err := c.subscribe(); err != nil {
+		_ = c.Close()
+		return nil, fmt.Errorf("client: subscribe: %w", err)
+	}
+
 	return c, nil
 }
 
