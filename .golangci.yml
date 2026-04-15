@@ -22,14 +22,11 @@ linters:
     # Testing
     - testifylint
 
-linters-settings:
-  revive:
-    rules:
-      - name: var-naming
-      - name: exported
-  gocritic:
-    enabled-checks:
-      - newDeref
-  exhaustruct:
-    exclude:
-      - ".*_test\\.go"
+  settings:
+    revive:
+      rules:
+        - name: var-naming
+        - name: exported
+    exhaustruct:
+      exclude:
+        - ".*_test\\.go"
