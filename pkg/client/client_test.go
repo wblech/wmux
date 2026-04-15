@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/protocol"
-	"github.com/wblech/wmux/internal/transport"
 )
 
 // shortTempDir creates a short temp directory to avoid Unix socket path limits.
@@ -24,140 +23,12 @@ func shortTempDir(t *testing.T) string {
 	return dir
 }
 
-// acceptControl accepts and authenticates a control channel connection.
-// Returns the assigned clientID, or "" on failure.
-func acceptControl(ln net.Listener, token []byte, done chan struct{}) string {
-	conn, err := ln.Accept()
-	if err != nil {
-		return ""
-	}
-
-	pConn := protocol.NewConn(conn)
-	frame, err := pConn.ReadFrame()
-	if err != nil {
-		_ = conn.Close()
-		return ""
-	}
-
-	if frame.Type != protocol.MsgAuth || len(frame.Payload) < 1+auth.TokenSize {
-		_ = conn.Close()
-		return ""
-	}
-
-	channelByte := frame.Payload[0]
-	receivedToken := frame.Payload[1 : 1+auth.TokenSize]
-
-	if channelByte != byte(transport.ChannelControl) || !auth.Verify(token, receivedToken) {
-		_ = pConn.WriteFrame(protocol.Frame{
-			Version: protocol.ProtocolVersion,
-			Type:    protocol.MsgError,
-			Payload: []byte(`{"error":"auth failed"}`),
-		})
-		_ = conn.Close()
-		return ""
-	}
-
-	clientID := "mock-client-1"
-	_ = pConn.WriteFrame(protocol.Frame{
-		Version: protocol.ProtocolVersion,
-		Type:    protocol.MsgOK,
-		Payload: []byte(clientID),
-	})
-
-	go func() {
-		<-done
-		_ = conn.Close()
-	}()
-
-	return clientID
-}
-
-// acceptStream accepts and authenticates a stream channel connection.
-func acceptStream(ln net.Listener, token []byte, expectedClientID string, done chan struct{}) {
-	conn, err := ln.Accept()
-	if err != nil {
-		return
-	}
-
-	pConn := protocol.NewConn(conn)
-	frame, err := pConn.ReadFrame()
-	if err != nil {
-		_ = conn.Close()
-		return
-	}
-
-	if frame.Type != protocol.MsgAuth {
-		_ = conn.Close()
-		return
-	}
-
-	// Payload: [ChannelStream:1][token:32][clientID_len:1][clientID:N]
-	minSize := 1 + auth.TokenSize + 1 + 1
-	if len(frame.Payload) < minSize {
-		_ = conn.Close()
-		return
-	}
-
-	receivedToken := frame.Payload[1 : 1+auth.TokenSize]
-	if !auth.Verify(token, receivedToken) {
-		_ = conn.Close()
-		return
-	}
-
-	idLen := int(frame.Payload[1+auth.TokenSize])
-	clientID := string(frame.Payload[1+auth.TokenSize+1 : 1+auth.TokenSize+1+idLen])
-
-	if clientID != expectedClientID {
-		_ = pConn.WriteFrame(protocol.Frame{
-			Version: protocol.ProtocolVersion,
-			Type:    protocol.MsgError,
-			Payload: []byte(`{"error":"client id mismatch"}`),
-		})
-		_ = conn.Close()
-		return
-	}
-
-	_ = pConn.WriteFrame(protocol.Frame{
-		Version: protocol.ProtocolVersion,
-		Type:    protocol.MsgOK,
-		Payload: nil,
-	})
-
-	go func() {
-		<-done
-		_ = conn.Close()
-	}()
-}
-
 // startMockServer creates a Unix socket server that accepts control + stream
 // connections and performs the auth handshake for both.
 func startMockServer(t *testing.T) (socketPath, tokenPath string, cleanup func()) {
 	t.Helper()
-	dir := shortTempDir(t)
-	socketPath = filepath.Join(dir, "d.sock")
-	tokenPath = filepath.Join(dir, "d.token")
-
-	token, err := auth.Generate()
-	require.NoError(t, err)
-	require.NoError(t, auth.SaveToFile(token, tokenPath))
-
-	ln, err := net.Listen("unix", socketPath)
-	require.NoError(t, err)
-
-	done := make(chan struct{})
-
-	go func() {
-		clientID := acceptControl(ln, token, done)
-		if clientID == "" {
-			return
-		}
-		acceptStream(ln, token, clientID, done)
-	}()
-
-	return socketPath, tokenPath, func() {
-		close(done)
-		_ = ln.Close()
-	}
+	socketPath, tokenPath, _, cleanup = startMockServerWithHandlers(t, nil)
+	return socketPath, tokenPath, cleanup
 }
 
 func TestNew_Success(t *testing.T) {
@@ -233,6 +104,21 @@ func startMockServerWithHandlers(
 	handlers map[protocol.MessageType]handlerFunc,
 ) (socketPath, tokenPath string, mock *mockServer, cleanup func()) {
 	t.Helper()
+
+	if handlers == nil {
+		handlers = make(map[protocol.MessageType]handlerFunc)
+	}
+	// Default: auto-ack event subscription from connect().
+	if _, ok := handlers[protocol.MsgEvent]; !ok {
+		handlers[protocol.MsgEvent] = func(_ []byte) protocol.Frame {
+			return protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: nil,
+			}
+		}
+	}
+
 	dir := shortTempDir(t)
 	socketPath = filepath.Join(dir, "d.sock")
 	tokenPath = filepath.Join(dir, "d.token")
