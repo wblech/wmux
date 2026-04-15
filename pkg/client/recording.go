@@ -55,7 +55,7 @@ func (c *Client) recordAction(sessionID, action string) (RecordResult, error) {
 
 // historyReader implements io.ReadCloser for streamed history responses.
 type historyReader struct {
-	conn     *protocol.Conn
+	frames   <-chan protocol.Frame
 	buf      []byte
 	done     bool
 	initial  []byte
@@ -78,10 +78,10 @@ func (r *historyReader) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 
-	frame, err := r.conn.ReadFrame()
-	if err != nil {
+	frame, ok := <-r.frames
+	if !ok {
 		r.done = true
-		return 0, fmt.Errorf("client: read history frame: %w", err)
+		return 0, io.EOF
 	}
 
 	if frame.Type == protocol.MsgHistoryEnd {
@@ -109,6 +109,10 @@ func (r *historyReader) Close() error {
 // History requests scrollback history from the daemon in the specified format.
 // Format must be "ansi", "text", or "html". Lines of 0 means all available.
 // Returns an io.ReadCloser that streams the history data.
+//
+// History holds rpcMu for the write, then reads from the history channel.
+// The daemon responds with MsgHistory frames (routed to c.history by readControl)
+// or MsgError (routed to c.responses).
 func (c *Client) History(sessionID, format string, lines int) (io.ReadCloser, error) {
 	payload, err := json.Marshal(struct {
 		SessionID string `json:"session_id"`
@@ -123,23 +127,40 @@ func (c *Client) History(sessionID, format string, lines int) (io.ReadCloser, er
 		return nil, fmt.Errorf("client: marshal history: %w", err)
 	}
 
-	resp, err := c.sendRequest(protocol.MsgHistory, payload)
+	c.rpcMu.Lock()
+	err = c.ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistory,
+		Payload: payload,
+	})
+	c.rpcMu.Unlock()
 	if err != nil {
-		return nil, err
-	}
-	if resp.Type == protocol.MsgError {
-		return nil, c.parseError(resp)
+		return nil, fmt.Errorf("client: write history: %w", err)
 	}
 
-	if resp.Type == protocol.MsgHistoryEnd {
-		return io.NopCloser(strings.NewReader("")), nil
+	// The daemon responds with MsgHistory/MsgHistoryEnd (→ c.history) or MsgError (→ c.responses).
+	select {
+	case resp, ok := <-c.history:
+		if !ok {
+			return nil, fmt.Errorf("client: connection closed")
+		}
+		if resp.Type == protocol.MsgHistoryEnd {
+			return io.NopCloser(strings.NewReader("")), nil
+		}
+		return &historyReader{
+			frames:   c.history,
+			initial:  resp.Payload,
+			done:     false,
+			buf:      nil,
+			usedInit: false,
+		}, nil
+	case resp, ok := <-c.responses:
+		if !ok {
+			return nil, fmt.Errorf("client: connection closed")
+		}
+		if resp.Type == protocol.MsgError {
+			return nil, c.parseError(resp)
+		}
+		return nil, fmt.Errorf("client: unexpected response type: %s", resp.Type)
 	}
-
-	return &historyReader{
-		conn:     c.pConn,
-		initial:  resp.Payload,
-		done:     false,
-		buf:      nil,
-		usedInit: false,
-	}, nil
 }

@@ -120,8 +120,8 @@ Compared to text-based protocols like JSON-over-newline:
 - **Framing clarity**: Length-prefixed frames eliminate the need for delimiter
   parsing, which is error-prone when the payload itself contains arbitrary
   bytes (terminal escape sequences, binary data).
-- **Two-channel architecture**: The protocol supports separate control and
-  stream channels. Control handles low-frequency RPCs (create, resize, list).
-  Stream carries high-frequency PTY I/O with backpressure signaling. This
+- **Two-channel architecture**: The protocol uses separate control and stream
+  channels over the same Unix socket. Control handles low-frequency RPCs
+  (create, resize, list). Stream carries high-frequency PTY I/O. This
   separation prevents a flood of terminal output from starving control
   messages.

@@ -10,7 +10,7 @@ import (
 )
 
 func TestClient_MetaSet(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgMetaSet: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string `json:"session_id"`
@@ -37,7 +37,7 @@ func TestClient_MetaSet(t *testing.T) {
 }
 
 func TestClient_MetaSet_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgMetaSet: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},
@@ -53,7 +53,7 @@ func TestClient_MetaSet_Error(t *testing.T) {
 }
 
 func TestClient_MetaGet(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgMetaGet: func(payload []byte) protocol.Frame {
 			var req struct {
 				Key string `json:"key"`
@@ -74,7 +74,7 @@ func TestClient_MetaGet(t *testing.T) {
 }
 
 func TestClient_MetaGet_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgMetaGet: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},
@@ -90,7 +90,7 @@ func TestClient_MetaGet_Error(t *testing.T) {
 }
 
 func TestClient_MetaGetAll(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgMetaGet: func(payload []byte) protocol.Frame {
 			var req struct {
 				Key string `json:"key"`
@@ -117,7 +117,7 @@ func TestClient_MetaGetAll(t *testing.T) {
 }
 
 func TestClient_MetaGetAll_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgMetaGet: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},

@@ -10,7 +10,7 @@ import (
 )
 
 func TestClient_ForwardEnv(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgEnvForward: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string            `json:"session_id"`
@@ -39,7 +39,7 @@ func TestClient_ForwardEnv(t *testing.T) {
 }
 
 func TestClient_ForwardEnv_EmptyMap(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgEnvForward: func(_ []byte) protocol.Frame {
 			return okFrame(nil)
 		},
@@ -55,7 +55,7 @@ func TestClient_ForwardEnv_EmptyMap(t *testing.T) {
 }
 
 func TestClient_ForwardEnv_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgEnvForward: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},
