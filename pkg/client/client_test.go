@@ -246,7 +246,7 @@ func startMockServerWithHandlers(
 
 	done := make(chan struct{})
 	ready := make(chan struct{})
-	mock = &mockServer{ready: ready}
+	mock = &mockServer{streamConn: nil, ready: ready}
 
 	go func() {
 		// Accept control connection.
@@ -1066,7 +1066,7 @@ func TestClient_EventDoesNotCorruptRPC(t *testing.T) {
 
 			// Now send the actual RPC response.
 			if frame.Type == protocol.MsgList {
-				resp, _ := json.Marshal([]SessionInfo{{ID: "s1", State: "alive"}})
+				resp, _ := json.Marshal([]SessionInfo{{ID: "s1", State: "alive", Pid: 0, Cols: 0, Rows: 0, Shell: ""}})
 				_ = pConn.WriteFrame(protocol.Frame{
 					Version: protocol.ProtocolVersion,
 					Type:    protocol.MsgOK,
@@ -1115,6 +1115,8 @@ func TestClient_StreamDataDelivery(t *testing.T) {
 	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
 	require.NoError(t, err)
 	defer c.Close() //nolint:errcheck
+
+	<-mock.ready // wait for mock server to accept both connections
 
 	received := make(chan struct {
 		sessionID string
