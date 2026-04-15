@@ -14,7 +14,7 @@ import (
 )
 
 func TestClient_RecordStart(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgRecord: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string `json:"session_id"`
@@ -44,7 +44,7 @@ func TestClient_RecordStart(t *testing.T) {
 }
 
 func TestClient_RecordStop(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgRecord: func(payload []byte) protocol.Frame {
 			var req struct {
 				Action string `json:"action"`
@@ -70,7 +70,7 @@ func TestClient_RecordStop(t *testing.T) {
 }
 
 func TestClient_RecordStart_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgRecord: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},
@@ -104,6 +104,7 @@ func startStreamingMockServer(t *testing.T, handler func(protocol.MessageType, [
 	done := make(chan struct{})
 
 	go func() {
+		// Accept control connection.
 		conn, err := ln.Accept()
 		if err != nil {
 			return
@@ -116,21 +117,46 @@ func startStreamingMockServer(t *testing.T, handler func(protocol.MessageType, [
 			_ = conn.Close()
 			return
 		}
-		if frame.Type != protocol.MsgAuth || len(frame.Payload) != 1+auth.TokenSize || !auth.Verify(token, frame.Payload[1:]) {
+		if frame.Type != protocol.MsgAuth || len(frame.Payload) < 1+auth.TokenSize || !auth.Verify(token, frame.Payload[1:1+auth.TokenSize]) {
 			_ = pConn.WriteFrame(errFrame("auth failed"))
 			_ = conn.Close()
 			return
 		}
+
+		clientID := "mock-client-1"
 		_ = pConn.WriteFrame(protocol.Frame{
 			Version: protocol.ProtocolVersion,
 			Type:    protocol.MsgOK,
-			Payload: nil,
+			Payload: []byte(clientID),
 		})
 
+		// Accept stream connection.
+		streamRaw, err := ln.Accept()
+		if err != nil {
+			_ = conn.Close()
+			return
+		}
+		streamPConn := protocol.NewConn(streamRaw)
+		sFrame, err := streamPConn.ReadFrame()
+		if err != nil {
+			_ = streamRaw.Close()
+			_ = conn.Close()
+			return
+		}
+		if sFrame.Type == protocol.MsgAuth {
+			_ = streamPConn.WriteFrame(protocol.Frame{
+				Version: protocol.ProtocolVersion,
+				Type:    protocol.MsgOK,
+				Payload: nil,
+			})
+		}
+
+		// Dispatch loop for control channel.
 		for {
 			select {
 			case <-done:
 				_ = conn.Close()
+				_ = streamRaw.Close()
 				return
 			default:
 			}
@@ -205,7 +231,7 @@ func TestClient_History_Empty(t *testing.T) {
 }
 
 func TestClient_History_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgHistory: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},

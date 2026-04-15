@@ -10,7 +10,7 @@ import (
 )
 
 func TestClient_List_WithPrefix(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgList: func(payload []byte) protocol.Frame {
 			var req struct {
 				Prefix string `json:"prefix"`
@@ -37,7 +37,7 @@ func TestClient_List_WithPrefix(t *testing.T) {
 }
 
 func TestClient_List_NoOptions(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgList: func(_ []byte) protocol.Frame {
 			sessions := []SessionInfo{
 				{ID: "s1", State: "alive", Pid: 1, Cols: 80, Rows: 24, Shell: "/bin/sh"},
@@ -58,7 +58,7 @@ func TestClient_List_NoOptions(t *testing.T) {
 }
 
 func TestClient_KillPrefix(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgKillPrefix: func(payload []byte) protocol.Frame {
 			var req struct {
 				Prefix string `json:"prefix"`
@@ -85,7 +85,7 @@ func TestClient_KillPrefix(t *testing.T) {
 }
 
 func TestClient_KillPrefix_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgKillPrefix: func(_ []byte) protocol.Frame {
 			return errFrame("no sessions match prefix")
 		},

@@ -12,7 +12,7 @@ import (
 
 func TestClient_UntilExit(t *testing.T) {
 	ec := 0
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgWait: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string `json:"session_id"`
@@ -49,7 +49,7 @@ func TestClient_UntilExit(t *testing.T) {
 }
 
 func TestClient_UntilExit_WithTimeout(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgWait: func(payload []byte) protocol.Frame {
 			var req struct {
 				Timeout int64 `json:"timeout"`
@@ -78,7 +78,7 @@ func TestClient_UntilExit_WithTimeout(t *testing.T) {
 }
 
 func TestClient_UntilIdle(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgWait: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string `json:"session_id"`
@@ -112,7 +112,7 @@ func TestClient_UntilIdle(t *testing.T) {
 }
 
 func TestClient_UntilMatch(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgWait: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string `json:"session_id"`
@@ -146,7 +146,7 @@ func TestClient_UntilMatch(t *testing.T) {
 }
 
 func TestClient_UntilExit_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgWait: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},

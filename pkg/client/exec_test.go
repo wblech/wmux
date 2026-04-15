@@ -10,7 +10,7 @@ import (
 )
 
 func TestClient_Exec(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgExec: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionID string `json:"session_id"`
@@ -35,7 +35,7 @@ func TestClient_Exec(t *testing.T) {
 }
 
 func TestClient_Exec_WithNoNewline(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgExec: func(payload []byte) protocol.Frame {
 			var req struct {
 				Newline bool `json:"newline"`
@@ -56,7 +56,7 @@ func TestClient_Exec_WithNoNewline(t *testing.T) {
 }
 
 func TestClient_Exec_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgExec: func(_ []byte) protocol.Frame {
 			return errFrame("session not found")
 		},
@@ -73,7 +73,7 @@ func TestClient_Exec_Error(t *testing.T) {
 }
 
 func TestClient_ExecSync(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgExecSync: func(payload []byte) protocol.Frame {
 			var req struct {
 				SessionIDs []string `json:"session_ids"`
@@ -111,7 +111,7 @@ func TestClient_ExecSync(t *testing.T) {
 }
 
 func TestClient_ExecPrefix(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgExecSync: func(payload []byte) protocol.Frame {
 			var req struct {
 				Prefix string `json:"prefix"`
@@ -145,7 +145,7 @@ func TestClient_ExecPrefix(t *testing.T) {
 }
 
 func TestClient_ExecSync_Error(t *testing.T) {
-	socketPath, tokenPath, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgExecSync: func(_ []byte) protocol.Frame {
 			return errFrame("no matching sessions")
 		},
