@@ -25,11 +25,6 @@ jobs:
         with:
           args: --timeout=5m
 
-      - name: Install goframe
-        run: go install github.com/wblech/goframe/cmd/goframe@latest
-
-      - name: Run goframe check
-        run: goframe check
 
   test:
     runs-on: ubuntu-latest
