@@ -1,40 +1,49 @@
-# Binaries
+# If you prefer the allow list template instead of the deny list, see community template:
+# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
+#
+# Binaries for programs and plugins
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 
-# Test binary
+# Test binary, built with `go test -c`
 *.test
 
-# Output
+# Code coverage profiles and other test artifacts
 *.out
+coverage.*
+*.coverprofile
+profile.cov
 
-# Go workspace
+# Dependency directories (remove the comment below to include it)
+# vendor/
+
+# Go workspace file
 go.work
 go.work.sum
 
-# Environment
+# env file
 .env
 
-# IDE
+# Editor/IDE
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Docs (internal planning — not published)
-docs/roadmap/
-docs/decisions/
-docs/superpowers/
+# Built binaries
+/wmux
+/wmux-tmux
 
 # MkDocs build output
 site/
 
-# Compiled binaries
-/wmux
-/wmux-tmux
+# Docs (internal planning — not published)
+docs/roadmap/
+docs/decisions/
+docs/superpowers/
 
 # Claude local settings (permissions)
 .claude/settings.local.json
