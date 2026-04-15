@@ -708,7 +708,8 @@ func cmdStatus(_ []string) int {
 		return 1
 	}
 
-	fmt.Printf("Version:  %s\n", sr.Version)
+	fmt.Printf("Build:    %s (%s)\n", buildinfo.Version, buildinfo.Commit)
+	fmt.Printf("Protocol: %s\n", sr.Version)
 	fmt.Printf("Uptime:   %s\n", sr.Uptime)
 	fmt.Printf("Sessions: %d\n", sr.SessionCount)
 	fmt.Printf("Clients:  %d\n", sr.ClientCount)

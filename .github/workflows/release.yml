@@ -45,9 +45,10 @@ jobs:
 
       - name: Calculate next version
         id: version
+        env:
+          BUMP: ${{ inputs.bump }}
         run: |
-          BUMP="${{ inputs.bump }}"
-          LATEST=$(git tag --sort=-v:refname | head -n1)
+          LATEST=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
 
           if [ -z "$LATEST" ]; then
             # No tags yet — first release
