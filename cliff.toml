@@ -8,12 +8,8 @@ header = """
 All notable changes to wmux are documented in this file.\n
 """
 body = """
-{%- macro remote_url() -%}
-  https://github.com/wblech/wmux
-{%- endmacro -%}
-
 {% if version -%}
-    ## [{{ version | trim_start_matches(pat="v") }}]{% if commit_id %}({{ remote_url() }}/releases/tag/{{ version }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
+    ## [{{ version | trim_start_matches(pat="v") }}]{% if commit_id %}(https://github.com/wblech/wmux/releases/tag/{{ version }}){% endif %} - {{ timestamp | date(format="%Y-%m-%d") }}
 {% else -%}
     ## [Unreleased]
 {% endif -%}
