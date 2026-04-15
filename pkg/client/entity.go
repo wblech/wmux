@@ -68,9 +68,9 @@ type SessionHistory struct {
 // Event represents a daemon event delivered to the client.
 type Event struct {
 	// Type is the event type string (e.g., "session.created").
-	Type string
+	Type string `json:"type"`
 	// SessionID is the session this event relates to.
-	SessionID string
+	SessionID string `json:"session_id"`
 	// Data contains event-specific key-value pairs.
-	Data map[string]any
+	Data map[string]any `json:"payload,omitempty"`
 }

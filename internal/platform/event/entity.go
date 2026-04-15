@@ -1,7 +1,10 @@
 // Package event provides an in-process event bus for wmux lifecycle events.
 package event
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // Type identifies the kind of event.
 type Type int
@@ -64,6 +67,57 @@ func (t Type) String() string {
 		return "shell.ready"
 	default:
 		return "unknown"
+	}
+}
+
+// MarshalJSON encodes the event type as its dot-notation string.
+func (t Type) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + t.String() + `"`), nil
+}
+
+// UnmarshalJSON decodes a dot-notation string back into a Type.
+func (t *Type) UnmarshalJSON(data []byte) error {
+	if len(data) < 2 || data[0] != '"' || data[len(data)-1] != '"' {
+		return fmt.Errorf("event: type must be a JSON string")
+	}
+	s := string(data[1 : len(data)-1])
+	parsed, ok := typeFromString(s)
+	if !ok {
+		return fmt.Errorf("event: unknown type %q", s)
+	}
+	*t = parsed
+	return nil
+}
+
+// typeFromString maps a dot-notation string to its Type constant.
+func typeFromString(s string) (Type, bool) {
+	switch s {
+	case "session.created":
+		return SessionCreated, true
+	case "session.attached":
+		return SessionAttached, true
+	case "session.detached":
+		return SessionDetached, true
+	case "session.exited":
+		return SessionExited, true
+	case "session.idle":
+		return SessionIdle, true
+	case "session.killed":
+		return SessionKilled, true
+	case "resize":
+		return Resize, true
+	case "cwd.changed":
+		return CwdChanged, true
+	case "notification":
+		return Notification, true
+	case "output.flood":
+		return OutputFlood, true
+	case "recording.limit_reached":
+		return RecordingLimitReached, true
+	case "shell.ready":
+		return ShellReady, true
+	default:
+		return 0, false
 	}
 }
 
