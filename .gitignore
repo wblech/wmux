@@ -48,9 +48,10 @@ docs/superpowers/
 # Claude local settings (permissions)
 .claude/settings.local.json
 
-# BMAD skills
+# BMAD and WDS skills
 _bmad/
 .claude/skills/bmad*/
+.claude/skills/wds*/
 
 # Worktrees
 .worktrees/
