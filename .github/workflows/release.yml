@@ -36,13 +36,6 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Install git-cliff
-        uses: orhun/git-cliff-action@v4
-        with:
-          args: --version
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Calculate next version
         id: version
         env:
@@ -111,15 +104,23 @@ jobs:
           echo "Releasing: $NEXT"
 
       - name: Generate changelog
-        run: |
-          git-cliff --config cliff.toml --tag "${{ steps.version.outputs.version }}" --output CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag "${{ steps.version.outputs.version }}"
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract release notes
         id: notes
-        run: |
-          # Extract only the section for this version
-          git-cliff --config cliff.toml --tag "${{ steps.version.outputs.version }}" --unreleased --strip header > /tmp/release-notes.md
-          echo "path=/tmp/release-notes.md" >> "$GITHUB_OUTPUT"
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag "${{ steps.version.outputs.version }}" --unreleased --strip header
+        env:
+          OUTPUT: /tmp/release-notes.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit changelog
         run: |
