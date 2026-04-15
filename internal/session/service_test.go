@@ -42,7 +42,6 @@ func TestService_Create(t *testing.T) {
 
 	sess, err := svc.Create("test-create", defaultCreateOpts())
 	require.NoError(t, err)
-	require.NotNil(t, sess)
 
 	assert.Equal(t, "test-create", sess.ID)
 	assert.Equal(t, StateAlive, sess.State)

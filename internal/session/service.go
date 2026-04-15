@@ -3,6 +3,7 @@ package session
 import (
 	"fmt"
 	"io"
+	"maps"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -10,6 +11,14 @@ import (
 
 	"github.com/wblech/wmux/internal/platform/pty"
 )
+
+// snapshotSession returns a deep value-copy of the given Session.
+// The returned Session is safe to read without holding any lock.
+func snapshotSession(s *Session) Session {
+	cp := *s
+	cp.Metadata = maps.Clone(s.Metadata)
+	return cp
+}
 
 const (
 	// readChunkSize is the number of bytes read from the PTY in each iteration.
@@ -31,9 +40,9 @@ const (
 // Repository defines the persistence operations for sessions.
 type Repository interface {
 	// Get returns the session with the given id or ErrSessionNotFound.
-	Get(id string) (*Session, error)
+	Get(id string) (Session, error)
 	// List returns all persisted sessions.
-	List() []*Session
+	List() []Session
 	// Save persists or updates a session.
 	Save(sess *Session) error
 	// Delete removes a session by id.
@@ -111,9 +120,9 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 // Create starts a new terminal session with the given id and options.
 // It validates the id, checks for duplicates, enforces the session cap,
 // spawns the PTY, and starts the internal read and wait goroutines.
-func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
+func (s *Service) Create(id string, opts CreateOptions) (Session, error) {
 	if err := ValidateSessionID(id); err != nil {
-		return nil, err
+		return Session{}, err
 	}
 
 	// Acquire spawn slot. Blocks if the semaphore is full (FIFO queue).
@@ -126,11 +135,11 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 	defer s.mu.Unlock()
 
 	if _, exists := s.sessions[id]; exists {
-		return nil, ErrSessionExists
+		return Session{}, ErrSessionExists
 	}
 
 	if s.maxSessions > 0 && len(s.sessions) >= s.maxSessions {
-		return nil, ErrMaxSessions
+		return Session{}, ErrMaxSessions
 	}
 
 	cols := opts.Cols
@@ -167,7 +176,7 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 		Env:     opts.Env,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("spawn pty: %w", err)
+		return Session{}, fmt.Errorf("spawn pty: %w", err)
 	}
 
 	buf := newBuffer(highWM, lowWM)
@@ -215,31 +224,31 @@ func (s *Service) Create(id string, opts CreateOptions) (*Session, error) {
 	go s.readLoop(ms)
 	go s.waitLoop(ms)
 
-	return sess, nil
+	return snapshotSession(sess), nil
 }
 
 // Get returns the Session for the given id.
 // Returns ErrSessionNotFound if no session with that id exists.
-func (s *Service) Get(id string) (*Session, error) {
+func (s *Service) Get(id string) (Session, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	ms, ok := s.sessions[id]
 	if !ok {
-		return nil, ErrSessionNotFound
+		return Session{}, ErrSessionNotFound
 	}
 
-	return ms.session, nil
+	return snapshotSession(ms.session), nil
 }
 
 // List returns a snapshot of all currently managed sessions.
-func (s *Service) List() []*Session {
+func (s *Service) List() []Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	out := make([]*Session, 0, len(s.sessions))
+	out := make([]Session, 0, len(s.sessions))
 	for _, ms := range s.sessions {
-		out = append(out, ms.session)
+		out = append(out, snapshotSession(ms.session))
 	}
 
 	return out

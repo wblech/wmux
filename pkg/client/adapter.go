@@ -180,7 +180,7 @@ func (a *sessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
 
-func toInfo(sess *session.Session) daemon.SessionInfo {
+func toInfo(sess session.Session) daemon.SessionInfo {
 	return daemon.SessionInfo{
 		ID:    sess.ID,
 		State: sess.State.String(),
