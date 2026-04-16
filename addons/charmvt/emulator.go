@@ -1,0 +1,74 @@
+package charmvt
+
+import (
+	"strings"
+
+	"github.com/charmbracelet/x/vt"
+	"github.com/wblech/wmux/pkg/client"
+)
+
+// emulator wraps charmbracelet/x/vt as a client.ScreenEmulator.
+type emulator struct {
+	term *vt.SafeEmulator
+	cols int
+}
+
+func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
+	term := vt.NewSafeEmulator(cols, rows)
+
+	term.SetScrollbackSize(cfg.scrollback)
+
+	if cfg.logger != nil {
+		term.SetLogger(cfg.logger)
+	}
+
+	if cfg.callbacks != nil {
+		cb := vt.Callbacks{}
+		if cfg.callbacks.Bell != nil {
+			fn := cfg.callbacks.Bell
+			cb.Bell = func() { fn(sessionID) }
+		}
+		if cfg.callbacks.Title != nil {
+			fn := cfg.callbacks.Title
+			cb.Title = func(title string) { fn(sessionID, title) }
+		}
+		if cfg.callbacks.WorkingDirectory != nil {
+			fn := cfg.callbacks.WorkingDirectory
+			cb.WorkingDirectory = func(dir string) { fn(sessionID, dir) }
+		}
+		if cfg.callbacks.AltScreen != nil {
+			fn := cfg.callbacks.AltScreen
+			cb.AltScreen = func(active bool) { fn(sessionID, active) }
+		}
+		term.SetCallbacks(cb)
+	}
+
+	return &emulator{term: term, cols: cols}
+}
+
+// Process writes terminal data to the emulator.
+func (e *emulator) Process(data []byte) {
+	_, _ = e.term.Write(data)
+}
+
+// Snapshot returns the current terminal screen state.
+func (e *emulator) Snapshot() client.Snapshot {
+	viewport := normalizeLineEndings(e.term.Render())
+	scrollback := renderScrollback(e.term, e.cols)
+
+	return client.Snapshot{
+		Viewport:   []byte(viewport),
+		Scrollback: scrollback,
+	}
+}
+
+// Resize updates the terminal dimensions.
+func (e *emulator) Resize(cols, rows int) {
+	e.cols = cols
+	e.term.Resize(cols, rows)
+}
+
+// normalizeLineEndings replaces \r\n with \n.
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
+}
