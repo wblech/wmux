@@ -13,6 +13,7 @@ allow:
   - "internal/session/addon_emulator.go"
   - "internal/session/addon_manager.go"
   - "internal/session/addon_protocol.go"
+  - "internal/session/addon_starter.go"
   - "internal/session/backpressure.go"
   - "internal/session/batcher.go"
   - "internal/session/reaper.go"
