@@ -38,6 +38,12 @@ type Client struct {
 	responses chan protocol.Frame
 	history   chan protocol.Frame
 
+	// drainWg tracks in-flight drain goroutines launched after a timeout.
+	// The next sendRequest waits for all drains to finish before writing,
+	// preventing a drain goroutine from consuming a response that belongs
+	// to the subsequent RPC.
+	drainWg sync.WaitGroup
+
 	dataHandler func(sessionID string, data []byte)
 	evtHandler  func(Event)
 }
@@ -185,6 +191,7 @@ func connect(cfg *config) (*Client, error) {
 	c := &Client{
 		mu:          sync.Mutex{},
 		rpcMu:       sync.Mutex{},
+		drainWg:     sync.WaitGroup{},
 		clientID:    clientID,
 		rpcTimeout:  cfg.rpcTimeout,
 		ctrlConn:    ctrlConn,
@@ -230,6 +237,12 @@ func (c *Client) Close() error {
 // sendRequest sends a control frame and waits for the demuxed response.
 // Returns ErrRequestTimeout if the daemon does not respond within rpcTimeout.
 func (c *Client) sendRequest(msgType protocol.MessageType, payload []byte) (protocol.Frame, error) {
+	// Wait for any in-flight drain goroutine from a previous timeout to finish
+	// before acquiring rpcMu. This prevents the drain from consuming the
+	// response that belongs to this RPC. The wait is outside the lock so that
+	// drain goroutines can run while we block here.
+	c.drainWg.Wait()
+
 	c.rpcMu.Lock()
 	defer c.rpcMu.Unlock()
 
@@ -251,7 +264,9 @@ func (c *Client) sendRequest(msgType protocol.MessageType, payload []byte) (prot
 	case <-time.After(c.rpcTimeout):
 		// Drain the stale response in the background so the next RPC
 		// does not receive a mismatched response from this timed-out request.
+		c.drainWg.Add(1)
 		go func() {
+			defer c.drainWg.Done()
 			select {
 			case <-c.responses:
 			case <-c.done:
