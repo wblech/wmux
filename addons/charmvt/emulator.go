@@ -79,3 +79,16 @@ func (e *emulator) Resize(cols, rows int) {
 func normalizeLineEndings(s string) string {
 	return strings.ReplaceAll(s, "\r\n", "\n")
 }
+
+// trimTrailingEmptyRows removes trailing newlines that represent empty grid rows
+// from the viewport render output.
+func trimTrailingEmptyRows(s string) string {
+	return strings.TrimRight(s, "\n")
+}
+
+// toTerminalLineEndings converts \n to \r\n for terminal frontend consumption.
+// Terminal emulators require \r\n: \n alone moves the cursor down without
+// returning to column 0.
+func toTerminalLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\n", "\r\n")
+}

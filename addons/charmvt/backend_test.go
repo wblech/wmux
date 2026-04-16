@@ -139,9 +139,42 @@ func TestEmulator_CallbacksBound(t *testing.T) {
 	assert.Equal(t, "My Title", titleValue)
 }
 
-func TestNormalizeLineEndings(t *testing.T) {
-	assert.Equal(t, "a\nb\nc", normalizeLineEndings("a\r\nb\r\nc"))
-	assert.Equal(t, "no change", normalizeLineEndings("no change"))
+func TestTrimTrailingEmptyRows(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"empty string", "", ""},
+		{"only newlines", "\n\n\n", ""},
+		{"content with trailing newlines", "hello\nworld\n\n\n", "hello\nworld"},
+		{"content without trailing newlines", "hello\nworld", "hello\nworld"},
+		{"single line no newline", "hello", "hello"},
+		{"single newline", "\n", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, trimTrailingEmptyRows(tc.input))
+		})
+	}
+}
+
+func TestToTerminalLineEndings(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"no newlines", "hello", "hello"},
+		{"single newline", "a\nb", "a\r\nb"},
+		{"multiple newlines", "a\nb\nc", "a\r\nb\r\nc"},
+		{"empty string", "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, toTerminalLineEndings(tc.input))
+		})
+	}
 }
 
 // testLogger is a simple Logger implementation for testing.
