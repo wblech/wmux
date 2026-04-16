@@ -2,6 +2,25 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.3](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.3) - 2026-04-16
+
+### Bug Fixes
+
+- Auto-subscribe to daemon events on connect
+- Move checkAutomationMode after ReadFrame to prevent broken pipe on rejection
+
+### Documentation
+
+- Amend 0003 — events flow on control channel, not stream *(adr)*
+- Add 0020 client auto-subscribe, 0021 E2E in-process daemon *(adr)*
+
+### Testing
+
+- Add default MsgEvent handler to mock server for subscribe support
+- Add E2E test harness with in-process daemon
+- Add E2E tests for event delivery scenarios
+- Add unit tests for event.Type JSON marshal/unmarshal
+
 ## [0.1.0-beta.2](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.2) - 2026-04-15
 
 ### Bug Fixes
