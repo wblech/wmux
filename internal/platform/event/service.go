@@ -107,23 +107,25 @@ func (b *Bus) Publish(e Event) {
 }
 
 // Close shuts down the bus and closes all subscriber channels.
+// Channels are closed outside the lock to avoid deadlock with concurrent
+// Unsubscribe calls (which acquire sub.once then b.mu, while Close would
+// otherwise hold b.mu then acquire sub.once).
 func (b *Bus) Close() {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if b.closed {
+		b.mu.Unlock()
 		return
 	}
-
 	b.closed = true
+	subs := b.subs
+	b.subs = nil
+	b.mu.Unlock()
 
-	for _, sub := range b.subs {
+	for _, sub := range subs {
 		sub.once.Do(func() {
 			close(sub.ch)
 		})
 	}
-
-	b.subs = nil
 }
 
 // removeSub removes a subscription from the bus's subscriber list.

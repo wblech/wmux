@@ -180,6 +180,42 @@ func TestBus_DoubleClose(_ *testing.T) {
 	bus.Close() // should not panic
 }
 
+func TestBus_ConcurrentCloseAndUnsubscribe(t *testing.T) {
+	// Reproduces a deadlock where Close() holds b.mu and waits for sub.once,
+	// while Unsubscribe() holds sub.once and waits for b.mu in removeSub().
+	// Multiple subscribers + iterations maximize the chance of hitting the
+	// exact interleaving needed.
+	for range 500 {
+		bus := NewBus()
+
+		const numSubs = 10
+		subs := make([]*Subscription, numSubs)
+		for i := range numSubs {
+			subs[i] = bus.Subscribe()
+		}
+
+		// All subscribers unsubscribe concurrently with Close.
+		done := make(chan struct{})
+		go func() {
+			for _, sub := range subs {
+				go sub.Unsubscribe()
+			}
+		}()
+
+		go func() {
+			bus.Close()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+			// OK — no deadlock
+		case <-time.After(2 * time.Second):
+			t.Fatal("deadlock: Close and Unsubscribe blocked each other")
+		}
+	}
+}
+
 func TestBus_SubscribeTypesMultiple(t *testing.T) {
 	bus := NewBus()
 	defer bus.Close()
