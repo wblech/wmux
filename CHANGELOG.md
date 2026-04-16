@@ -2,7 +2,20 @@
 
 All notable changes to wmux are documented in this file.
 
-## [0.1.0-beta.7](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.7) - 2026-04-16
+## [addons/charmvt/v0.1.0-beta.3](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.1.0-beta.3) - 2026-04-16
+
+### Bug Fixes
+
+- Use operation-level mutex to prevent Snapshot starvation *(charmvt)*
+- Add RPC timeout to prevent client-wide freeze *(client)*
+- Resolve lint issues from attach-blocking fix
+
+### Testing
+
+- Convert contention evidence tests to regression tests *(charmvt)*
+- Convert rpcMu evidence tests to regression tests *(client)*
+
+## [0.1.0-beta.8](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.8) - 2026-04-16
 
 ### Bug Fixes
 
