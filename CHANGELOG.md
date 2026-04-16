@@ -2,6 +2,26 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.7](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.7) - 2026-04-16
+
+### Bug Fixes
+
+- Resolve deadlock between Bus.Close and Subscription.Unsubscribe *(event)*
+
+### Documentation
+
+- Document Snapshot \r\n line ending contract *(client)*
+
+### Features
+
+- Add trimTrailingEmptyRows and toTerminalLineEndings helpers *(charmvt)*
+- Make viewport terminal-ready (strip trailing rows, use \r\n) *(charmvt)*
+- Use \r\n line endings in scrollback *(charmvt)*
+
+### Testing
+
+- Add Unicode/Nerd Font preservation regression tests *(charmvt)*
+
 ## [0.1.0-beta.6](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.6) - 2026-04-16
 
 ### Documentation
