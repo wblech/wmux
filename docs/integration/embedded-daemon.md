@@ -34,6 +34,7 @@ func main() {
     d, err := client.NewDaemon(
         client.WithNamespace("myapp"),
         client.WithEmulatorBackend("xterm"),
+        client.WithXtermBinPath("path/to/addons/xterm/dist/index.js"),
         client.WithColdRestore(true),
     )
     if err != nil {
@@ -121,5 +122,6 @@ log.Printf("attached to %s (%d x %d)",
     result.Session.ID, result.Session.Cols, result.Session.Rows)
 ```
 
-The snapshot is only populated when the emulator backend is set to `"xterm"`.
-With `"none"`, both fields are nil.
+The snapshot is only populated when the emulator backend is set to `"xterm"` and
+`WithXtermBinPath` points to the compiled xterm addon (`addons/xterm/dist/index.js`).
+With backend `"none"` (the default), both fields are nil.
