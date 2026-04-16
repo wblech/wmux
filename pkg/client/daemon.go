@@ -106,10 +106,11 @@ func isDaemonMode(args []string) bool {
 // (by a prior client.New auto-start). If so, it runs the daemon and
 // returns true. If not, returns false immediately.
 //
-// Integrators add this as the first line in main():
+// Extra options are merged after CLI-parsed flags, allowing integrators
+// to inject non-serializable configuration such as emulator factories:
 //
 //	func main() {
-//	    if handled, err := client.ServeDaemon(os.Args); handled {
+//	    if handled, err := client.ServeDaemon(os.Args, charmvt.Backend()); handled {
 //	        if err != nil {
 //	            log.Fatal(err)
 //	        }
@@ -117,12 +118,13 @@ func isDaemonMode(args []string) bool {
 //	    }
 //	    // normal app...
 //	}
-func ServeDaemon(args []string) (bool, error) {
+func ServeDaemon(args []string, extraOpts ...Option) (bool, error) {
 	if !isDaemonMode(args) {
 		return false, nil
 	}
 
 	opts := parseDaemonArgs(args)
+	opts = append(opts, extraOpts...)
 	d, err := NewDaemon(opts...)
 	if err != nil {
 		return true, fmt.Errorf("wmux daemon: %w", err)

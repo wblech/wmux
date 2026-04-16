@@ -76,6 +76,26 @@ func TestServeDaemon_NotDaemonMode(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestServeDaemon_NotDaemonMode_WithExtraOpts(t *testing.T) {
+	handled, err := ServeDaemon(
+		[]string{"myapp", "--some-flag"},
+		WithColdRestore(true),
+		WithMaxScrollbackSize(999),
+	)
+	assert.False(t, handled)
+	assert.NoError(t, err)
+}
+
+func TestParseDaemonArgs_MergedWithExtraOpts(t *testing.T) {
+	args := []string{"myapp", daemonSentinel, "--namespace", "test"}
+	opts := parseDaemonArgs(args)
+	extra := []Option{WithColdRestore(true)}
+	opts = append(opts, extra...)
+	cfg := newConfig(opts...)
+	assert.Equal(t, "test", cfg.namespace)
+	assert.True(t, cfg.coldRestore)
+}
+
 func TestIsDaemonMode(t *testing.T) {
 	assert.True(t, isDaemonMode([]string{"watchtower", "__wmux_daemon__", "--namespace", "test"}))
 	assert.False(t, isDaemonMode([]string{"watchtower", "--help"}))
