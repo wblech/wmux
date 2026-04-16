@@ -52,8 +52,13 @@ func (e *emulator) Process(data []byte) {
 }
 
 // Snapshot returns the current terminal screen state.
+// Viewport uses \r\n line endings with trailing empty rows stripped.
+// Scrollback uses \r\n line endings.
 func (e *emulator) Snapshot() client.Snapshot {
-	viewport := normalizeLineEndings(e.term.Render())
+	viewport := e.term.Render()
+	viewport = trimTrailingEmptyRows(viewport)
+	viewport = toTerminalLineEndings(viewport)
+
 	scrollback := renderScrollback(e.term, e.cols)
 
 	return client.Snapshot{
@@ -73,11 +78,6 @@ func (e *emulator) SetScrollbackSize(lines int) {
 func (e *emulator) Resize(cols, rows int) {
 	e.cols = cols
 	e.term.Resize(cols, rows)
-}
-
-// normalizeLineEndings replaces \r\n with \n.
-func normalizeLineEndings(s string) string {
-	return strings.ReplaceAll(s, "\r\n", "\n")
 }
 
 // trimTrailingEmptyRows removes trailing newlines that represent empty grid rows

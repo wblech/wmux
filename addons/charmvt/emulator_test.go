@@ -21,13 +21,16 @@ func TestEmulator_ProcessAndSnapshot(t *testing.T) {
 	assert.Contains(t, string(snap.Viewport), "hello world")
 }
 
-// TestEmulator_EmptySnapshot verifies that a fresh emulator has a non-nil Viewport and nil Scrollback.
+// TestEmulator_EmptySnapshot verifies that a fresh emulator has no trailing empty rows
+// and nil Scrollback.
 func TestEmulator_EmptySnapshot(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-empty", 80, 24, cfg)
 
 	snap := em.Snapshot()
 	assert.NotNil(t, snap.Viewport)
+	assert.NotContains(t, string(snap.Viewport), "\n",
+		"empty viewport should have no newlines (trailing empty rows stripped)")
 	assert.Nil(t, snap.Scrollback)
 }
 
@@ -63,15 +66,33 @@ func TestEmulator_AltScreen(t *testing.T) {
 	assert.Contains(t, string(snapMain.Viewport), "main content")
 }
 
-// TestEmulator_LineEndingNormalization verifies that \r\n sequences do not appear in the snapshot viewport.
-func TestEmulator_LineEndingNormalization(t *testing.T) {
+// TestEmulator_TerminalLineEndings verifies that the viewport uses \r\n line endings.
+func TestEmulator_TerminalLineEndings(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-crlf", 80, 24, cfg)
 
 	em.Process([]byte("line one\r\nline two"))
 
 	snap := em.Snapshot()
-	assert.NotContains(t, string(snap.Viewport), "\r\n")
+	vp := string(snap.Viewport)
+	assert.Contains(t, vp, "line one\r\nline two")
+	assert.NotContains(t, vp, "\n\r\n", "should not have bare \\n before \\r\\n")
+}
+
+// TestEmulator_NoTrailingEmptyRows verifies that viewport trailing empty rows are stripped.
+func TestEmulator_NoTrailingEmptyRows(t *testing.T) {
+	cfg := defaultConfig()
+	// Small 5-row viewport; write one line of content — 4 rows are empty.
+	em := newEmulator("session-trailing", 80, 5, cfg)
+
+	em.Process([]byte("only line"))
+
+	snap := em.Snapshot()
+	vp := string(snap.Viewport)
+	assert.True(t, strings.HasPrefix(vp, "only line"),
+		"viewport should start with content")
+	assert.False(t, strings.HasSuffix(vp, "\r\n"),
+		"viewport should not end with empty rows")
 }
 
 // TestEmulator_Callbacks_Title verifies that the Title callback receives the correct session ID and title.
