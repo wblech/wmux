@@ -2,6 +2,42 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.5](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.5) - 2026-04-16
+
+### Bug Fixes
+
+- Lint fixups for EmulatorFactory (exhaustruct, gofmt)
+- Lint fixups for UpdateEmulatorScrollback (gofmt, exhaustruct, testifylint)
+
+### Documentation
+
+- Add ADR 0022 — emulator addons as optional Go modules
+- Update embedded-daemon guide for charmvt addon
+- Remove stale WithEmulatorBackend references from integration docs
+- Add Addons section with install and usage guide
+- Add ADR 0023 and document UpdateEmulatorScrollback
+
+### Features
+
+- Add EmulatorFactory interface to session.Service
+- Add EmulatorFactory interface, remove WithEmulatorBackend/WithXtermBinPath
+- Add charmvt addon module with Backend(), emulator, and scrollback rendering
+- Add MsgUpdateEmulatorScrollback RPC and daemon handler
+- Add Client.UpdateEmulatorScrollback method
+- Implement ScrollbackConfigurable *(charmvt)*
+- Add ScrollbackConfigurable interface and UpdateEmulatorScrollback (fix unstaged)
+
+### Refactoring
+
+- Move xterm addon wiring to CLI, use EmulatorFactory (fix unstaged)
+
+### Testing
+
+- Add emulator behavior unit tests *(charmvt)*
+- Add scrollback rendering unit tests *(charmvt)*
+- Add E2E tests for charmvt backend
+- Add E2E tests for UpdateEmulatorScrollback
+
 ## [0.1.0-beta.4](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.4) - 2026-04-16
 
 ### Bug Fixes
