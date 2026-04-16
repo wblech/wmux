@@ -62,6 +62,13 @@ func (e *emulator) Snapshot() client.Snapshot {
 	}
 }
 
+// SetScrollbackSize changes the scrollback buffer size at runtime.
+// Implements session.ScrollbackConfigurable.
+// Increasing preserves existing data. Decreasing discards oldest lines.
+func (e *emulator) SetScrollbackSize(lines int) {
+	e.term.SetScrollbackSize(lines)
+}
+
 // Resize updates the terminal dimensions.
 func (e *emulator) Resize(cols, rows int) {
 	e.cols = cols

@@ -110,6 +110,48 @@ func TestEmulator_NilCallbacks_NoPanic(t *testing.T) {
 	})
 }
 
+// TestEmulator_SetScrollbackSize verifies that increasing the scrollback size preserves existing data.
+func TestEmulator_SetScrollbackSize(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.scrollback = 100
+	em := newEmulator("test", 80, 5, cfg)
+
+	// Write enough to fill scrollback.
+	for i := range 20 {
+		em.Process([]byte(fmt.Sprintf("line %d\r\n", i)))
+	}
+
+	snap1 := em.Snapshot()
+	require.NotNil(t, snap1.Scrollback)
+
+	// Increase scrollback — no data loss.
+	em.SetScrollbackSize(200)
+
+	snap2 := em.Snapshot()
+	assert.Equal(t, snap1.Scrollback, snap2.Scrollback)
+}
+
+// TestEmulator_SetScrollbackSize_Decrease verifies that decreasing the scrollback size trims oldest lines.
+func TestEmulator_SetScrollbackSize_Decrease(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.scrollback = 1000
+	em := newEmulator("test", 80, 5, cfg)
+
+	for i := range 100 {
+		em.Process([]byte(fmt.Sprintf("line %d\r\n", i)))
+	}
+
+	snap1 := em.Snapshot()
+	require.NotNil(t, snap1.Scrollback)
+
+	// Decrease scrollback — oldest lines trimmed.
+	em.SetScrollbackSize(10)
+
+	snap2 := em.Snapshot()
+	// Should have less scrollback than before.
+	assert.Less(t, len(snap2.Scrollback), len(snap1.Scrollback))
+}
+
 // TestEmulator_ScrollbackWithStyles verifies that styled lines pushed into scrollback contain SGR sequences
 // and the original text.
 func TestEmulator_ScrollbackWithStyles(t *testing.T) {
