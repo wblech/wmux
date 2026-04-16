@@ -38,7 +38,6 @@ func main() {
     // Normal application startup.
     c, err := client.New(
         client.WithNamespace("watchtower"),
-        client.WithEmulatorBackend("xterm"),
     )
     if err != nil {
         log.Fatal(err)

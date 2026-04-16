@@ -92,7 +92,7 @@ All options work with both `client.New()` and `client.NewDaemon()`.
 | `WithAutoStart(enabled bool)` | `true` | Auto-start daemon if not running |
 | `WithColdRestore(enabled bool)` | `false` | Restore scrollback from disk on startup |
 | `WithMaxScrollbackSize(n int64)` | `0` (unlimited) | Max scrollback bytes per session |
-| `WithEmulatorBackend(backend string)` | `"none"` | Terminal emulator backend (`"none"` or `"xterm"`) |
+| `WithEmulatorFactory(f EmulatorFactory)` | `nil` | Emulator backend via addon module (e.g., `charmvt.Backend()`) |
 
 ## Further reading
 
