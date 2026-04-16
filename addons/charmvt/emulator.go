@@ -2,6 +2,7 @@ package charmvt
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/charmbracelet/x/vt"
 	"github.com/wblech/wmux/pkg/client"
@@ -9,12 +10,13 @@ import (
 
 // emulator wraps charmbracelet/x/vt as a client.ScreenEmulator.
 type emulator struct {
-	term *vt.SafeEmulator
+	mu   sync.Mutex
+	term *vt.Emulator
 	cols int
 }
 
 func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
-	term := vt.NewSafeEmulator(cols, rows)
+	term := vt.NewEmulator(cols, rows)
 
 	term.SetScrollbackSize(cfg.scrollback)
 
@@ -48,6 +50,8 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 
 // Process writes terminal data to the emulator.
 func (e *emulator) Process(data []byte) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	_, _ = e.term.Write(data)
 }
 
@@ -55,6 +59,9 @@ func (e *emulator) Process(data []byte) {
 // Viewport uses \r\n line endings with trailing empty rows stripped.
 // Scrollback uses \r\n line endings.
 func (e *emulator) Snapshot() client.Snapshot {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
 	viewport := e.term.Render()
 	viewport = trimTrailingEmptyRows(viewport)
 	viewport = toTerminalLineEndings(viewport)
@@ -71,11 +78,15 @@ func (e *emulator) Snapshot() client.Snapshot {
 // Implements session.ScrollbackConfigurable.
 // Increasing preserves existing data. Decreasing discards oldest lines.
 func (e *emulator) SetScrollbackSize(lines int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.term.SetScrollbackSize(lines)
 }
 
 // Resize updates the terminal dimensions.
 func (e *emulator) Resize(cols, rows int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.cols = cols
 	e.term.Resize(cols, rows)
 }

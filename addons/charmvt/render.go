@@ -9,7 +9,7 @@ import (
 )
 
 // renderScrollback converts the scrollback buffer cells into ANSI byte output.
-func renderScrollback(term *vt.SafeEmulator, cols int) []byte {
+func renderScrollback(term *vt.Emulator, cols int) []byte {
 	sbLen := term.ScrollbackLen()
 	if sbLen == 0 {
 		return nil
