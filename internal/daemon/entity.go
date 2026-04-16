@@ -178,6 +178,12 @@ type ListRequest struct {
 	Prefix string `json:"prefix,omitempty"`
 }
 
+// UpdateEmulatorScrollbackRequest is the payload for MsgUpdateEmulatorScrollback.
+type UpdateEmulatorScrollbackRequest struct {
+	SessionID       string `json:"session_id"`
+	ScrollbackLines int    `json:"scrollback_lines"`
+}
+
 // KillPrefixRequest is the JSON payload for MsgKillPrefix.
 type KillPrefixRequest struct {
 	Prefix string `json:"prefix"`

@@ -175,6 +175,10 @@ func (a *testSessionAdapter) MetaGetAll(id string) (map[string]string, error) {
 	return a.svc.MetaGetAll(id) //nolint:wrapcheck
 }
 
+func (a *testSessionAdapter) UpdateEmulatorScrollback(id string, scrollbackLines int) error {
+	return a.svc.UpdateEmulatorScrollback(id, scrollbackLines) //nolint:wrapcheck
+}
+
 func (a *testSessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
@@ -2822,8 +2826,9 @@ func (n *noopSessionManager) Snapshot(_ string) (SnapshotData, error) {
 func (n *noopSessionManager) LastActivity(_ string) (time.Time, error)       { return time.Time{}, nil }
 func (n *noopSessionManager) MetaSet(_, _, _ string) error                   { return nil }
 func (n *noopSessionManager) MetaGet(_, _ string) (string, error)            { return "", nil }
-func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error) { return nil, nil }
-func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))         {}
+func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error)    { return nil, nil }
+func (n *noopSessionManager) UpdateEmulatorScrollback(_ string, _ int) error    { return nil }
+func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))            {}
 
 // snapshotSpySessionManager extends noopSessionManager to return configurable
 // snapshot data. Used to test handleAttach snapshot population.
@@ -3055,4 +3060,79 @@ func TestDaemon_KillPrefix_NoMatch(t *testing.T) {
 	// Kill non-existent prefix → error.
 	killResp := sendControl(t, ctrl, protocol.MsgKillPrefix, KillPrefixRequest{Prefix: "nonexistent"})
 	assert.Equal(t, protocol.MsgError, killResp.Type)
+}
+
+func TestDaemon_UpdateEmulatorScrollback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	createResp := sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID:    "scroll-sess",
+		Shell: "/bin/sh",
+		Args:  nil,
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.Equal(t, protocol.MsgOK, createResp.Type)
+
+	// NoneEmulator doesn't implement ScrollbackConfigurable, so this should error.
+	resp := sendControl(t, ctrl, protocol.MsgUpdateEmulatorScrollback, UpdateEmulatorScrollbackRequest{
+		SessionID:       "scroll-sess",
+		ScrollbackLines: 50000,
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+	assert.Contains(t, string(resp.Payload), "scrollback")
+}
+
+func TestDaemon_UpdateEmulatorScrollback_NotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	resp := sendControl(t, ctrl, protocol.MsgUpdateEmulatorScrollback, UpdateEmulatorScrollbackRequest{
+		SessionID:       "no-such",
+		ScrollbackLines: 10000,
+	})
+	assert.Equal(t, protocol.MsgError, resp.Type)
+}
+
+func TestDaemon_UpdateEmulatorScrollback_InvalidPayload(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgUpdateEmulatorScrollback,
+		Payload: []byte("{bad json"),
+	})
+	require.NoError(t, err)
+
+	resp, err := ctrl.ReadFrame()
+	require.NoError(t, err)
+	assert.Equal(t, protocol.MsgError, resp.Type)
 }

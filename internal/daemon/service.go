@@ -108,6 +108,8 @@ type SessionManager interface {
 	MetaGet(id, key string) (string, error)
 	// MetaGetAll returns all metadata for a session.
 	MetaGetAll(id string) (map[string]string, error)
+	// UpdateEmulatorScrollback changes the scrollback buffer size of a running session.
+	UpdateEmulatorScrollback(id string, scrollbackLines int) error
 	// OnExit registers a callback invoked when a session exits.
 	OnExit(fn func(id string, exitCode int))
 }
@@ -340,6 +342,8 @@ func (d *Daemon) dispatch(c ConnectedClient, frame protocol.Frame) {
 		d.handleHistory(c, frame)
 	case protocol.MsgKillPrefix:
 		d.handleKillPrefix(c, frame)
+	case protocol.MsgUpdateEmulatorScrollback:
+		d.handleUpdateEmulatorScrollback(c, frame)
 	default:
 		_ = c.Control().WriteFrame(errorFrame("unknown message type"))
 	}
@@ -969,6 +973,22 @@ func (d *Daemon) handleKillPrefix(c ConnectedClient, frame protocol.Frame) {
 		Killed: killed,
 		Errors: errs,
 	}))
+}
+
+// handleUpdateEmulatorScrollback processes a MsgUpdateEmulatorScrollback frame.
+func (d *Daemon) handleUpdateEmulatorScrollback(c ConnectedClient, frame protocol.Frame) {
+	var req UpdateEmulatorScrollbackRequest
+	if err := json.Unmarshal(frame.Payload, &req); err != nil {
+		_ = c.Control().WriteFrame(errorFrame("invalid update emulator scrollback request"))
+		return
+	}
+
+	if err := d.sessionSvc.UpdateEmulatorScrollback(req.SessionID, req.ScrollbackLines); err != nil {
+		_ = c.Control().WriteFrame(errorFrame(err.Error()))
+		return
+	}
+
+	_ = c.Control().WriteFrame(okFrame(nil))
 }
 
 // sessionsByPrefix returns session IDs matching the given prefix.
