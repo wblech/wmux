@@ -654,14 +654,15 @@ func TestService_EmulatorFactory(t *testing.T) {
 			createdRows = rows
 			return NoneEmulator{}
 		},
+		closed: false,
 	}
 
 	svc := NewService(&pty.UnixSpawner{}, WithEmulatorFactory(fakeFactory))
-	_, err := svc.Create("factory-test", CreateOptions{
-		Shell: "/bin/sh",
-		Cols:  120,
-		Rows:  40,
-	})
+	opts := defaultCreateOpts()
+	opts.Shell = "/bin/sh"
+	opts.Cols = 120
+	opts.Rows = 40
+	_, err := svc.Create("factory-test", opts)
 	require.NoError(t, err)
 
 	assert.Equal(t, "factory-test", createdID)

@@ -88,12 +88,12 @@ type managedSession struct {
 
 // Service manages the lifecycle of terminal sessions.
 type Service struct {
-	mu           sync.RWMutex
-	sessions     map[string]*managedSession
-	spawner      pty.Spawner
-	maxSessions  int
-	onExit       func(id string, exitCode int)
-	spawnSem     chan struct{}
+	mu              sync.RWMutex
+	sessions        map[string]*managedSession
+	spawner         pty.Spawner
+	maxSessions     int
+	onExit          func(id string, exitCode int)
+	spawnSem        chan struct{}
 	addonManager    *AddonManager
 	emulatorFactory EmulatorFactory
 }
@@ -102,13 +102,14 @@ type Service struct {
 // Options are applied in order after the defaults are set.
 func NewService(spawner pty.Spawner, opts ...Option) *Service {
 	s := &Service{
-		mu:           sync.RWMutex{},
-		sessions:     make(map[string]*managedSession),
-		spawner:      spawner,
-		maxSessions:  0,
-		onExit:       nil,
-		spawnSem:     nil,
-		addonManager: nil,
+		mu:              sync.RWMutex{},
+		sessions:        make(map[string]*managedSession),
+		spawner:         spawner,
+		maxSessions:     0,
+		onExit:          nil,
+		spawnSem:        nil,
+		addonManager:    nil,
+		emulatorFactory: nil,
 	}
 
 	for _, o := range opts {
