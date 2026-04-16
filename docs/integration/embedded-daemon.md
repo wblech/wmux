@@ -23,6 +23,7 @@ import (
     "syscall"
 
     "github.com/wblech/wmux/pkg/client"
+    "github.com/wblech/wmux/addons/charmvt"
 )
 
 func main() {
@@ -33,8 +34,7 @@ func main() {
     // 1. Create and start the embedded daemon
     d, err := client.NewDaemon(
         client.WithNamespace("myapp"),
-        client.WithEmulatorBackend("xterm"),
-        client.WithXtermBinPath("path/to/addons/xterm/dist/index.js"),
+        charmvt.Backend(),
         client.WithColdRestore(true),
     )
     if err != nil {
@@ -122,6 +122,22 @@ log.Printf("attached to %s (%d x %d)",
     result.Session.ID, result.Session.Cols, result.Session.Rows)
 ```
 
-The snapshot is only populated when the emulator backend is set to `"xterm"` and
-`WithXtermBinPath` points to the compiled xterm addon (`addons/xterm/dist/index.js`).
-With backend `"none"` (the default), both fields are nil.
+The snapshot is populated when an emulator addon is configured (e.g.,
+`charmvt.Backend()`). Without an addon, both fields are nil.
+
+### Available backends
+
+**charmvt (recommended)** — Pure Go, no external dependencies:
+
+    import "github.com/wblech/wmux/addons/charmvt"
+
+    d, err := client.NewDaemon(
+        charmvt.Backend(),
+    )
+
+Install: `go get github.com/wblech/wmux/addons/charmvt`
+
+**xterm addon (legacy)** — Requires Node.js on the target:
+
+For maximum xterm.js fidelity, use the xterm addon with the CLI's `--xterm-bin`
+flag or build a custom `EmulatorFactory` wrapping the addon process.
