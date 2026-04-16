@@ -3,8 +3,10 @@ package e2e
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -266,4 +268,165 @@ func TestE2E_ClientDisconnectCleanup(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("daemon broken after client disconnect")
 	}
+}
+
+// xtermAddonBin returns the absolute path to the compiled xterm addon binary.
+// Skips the test if node is not available or the addon is not built.
+func xtermAddonBin(t *testing.T) string {
+	t.Helper()
+
+	bin := filepath.Join("..", "..", "addons", "xterm", "dist", "index.js")
+	absPath, err := filepath.Abs(bin)
+	require.NoError(t, err)
+
+	if _, err := os.Stat(absPath); err != nil {
+		t.Skipf("xterm addon not built: %v (run 'cd addons/xterm && npm run build')", err)
+	}
+
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skipf("node not found in PATH: %v", err)
+	}
+
+	return absPath
+}
+
+// startTestDaemonWithAddon creates a daemon with the xterm addon emulator wired in.
+func startTestDaemonWithAddon(t *testing.T) *testDaemonEnv {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	addonBin := xtermAddonBin(t)
+
+	dir, err := os.MkdirTemp("", "wmux-e2e-addon")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	sock := filepath.Join(dir, "d.sock")
+	tokenPath := filepath.Join(dir, "d.token")
+
+	token, err := auth.Generate()
+	require.NoError(t, err)
+	require.NoError(t, auth.SaveToFile(token, tokenPath))
+
+	ln, err := ipc.Listen(sock)
+	require.NoError(t, err)
+
+	srv := transport.NewServer(ln, token)
+	spawner := &pty.UnixSpawner{}
+
+	starter := session.NewCommandProcessStarter("node", addonBin)
+	mgr := session.NewAddonManager(starter)
+	svc := session.NewService(spawner, session.WithAddonManager(mgr))
+
+	bus := event.NewBus()
+
+	d := daemon.NewDaemon(
+		&serverAdapter{srv: srv},
+		&sessionAdapter{svc: svc},
+		daemon.WithEventBus(bus),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _ = d.Start(ctx) }()
+	time.Sleep(50 * time.Millisecond)
+
+	t.Cleanup(func() {
+		cancel()
+		bus.Close()
+		mgr.Shutdown()
+	})
+
+	return &testDaemonEnv{
+		SocketPath: sock,
+		TokenPath:  tokenPath,
+	}
+}
+
+func TestE2E_AttachReturnsSnapshot(t *testing.T) {
+	env := startTestDaemonWithAddon(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("snap-e2e", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo hello-e2e-snapshot && sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	// Poll until the addon has processed the echoed output (node startup can be slow).
+	var result client.AttachResult
+	require.Eventually(t, func() bool {
+		result, err = c.Attach("snap-e2e")
+		if err != nil || result.Snapshot.Viewport == nil {
+			return false
+		}
+		return strings.Contains(string(result.Snapshot.Viewport), "hello-e2e-snapshot")
+	}, 5*time.Second, 200*time.Millisecond,
+		"E2E: Attach must return viewport containing the echoed text")
+
+	assert.Equal(t, "snap-e2e", result.Session.ID)
+}
+
+func TestE2E_DetachReattachPreservesSnapshot(t *testing.T) {
+	env := startTestDaemonWithAddon(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("reattach-e2e", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo reattach-test && sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	// Poll until the addon has processed the echoed output.
+	var result1 client.AttachResult
+	require.Eventually(t, func() bool {
+		result1, err = c.Attach("reattach-e2e")
+		if err != nil || result1.Snapshot.Viewport == nil {
+			return false
+		}
+		return strings.Contains(string(result1.Snapshot.Viewport), "reattach-test")
+	}, 5*time.Second, 200*time.Millisecond,
+		"E2E: initial Attach must return viewport containing the echoed text")
+
+	require.NoError(t, c.Detach("reattach-e2e"))
+
+	result2, err := c.Attach("reattach-e2e")
+	require.NoError(t, err)
+
+	assert.NotNil(t, result2.Snapshot.Viewport,
+		"E2E: Reattach must return snapshot — terminal state is not lost on detach")
+	assert.Contains(t, string(result2.Snapshot.Viewport), "reattach-test")
+}
+
+func TestE2E_NoneBackend_EmptySnapshot(t *testing.T) {
+	env := startTestDaemon(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("none-snap", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo none-backend && sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	time.Sleep(500 * time.Millisecond)
+
+	result, err := c.Attach("none-snap")
+	require.NoError(t, err)
+
+	assert.Nil(t, result.Snapshot.Scrollback)
+	assert.Nil(t, result.Snapshot.Viewport)
 }
