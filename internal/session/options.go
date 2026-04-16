@@ -30,3 +30,9 @@ func WithSpawnSemaphore(n int) Option {
 func WithAddonManager(mgr *AddonManager) Option {
 	return func(s *Service) { s.addonManager = mgr }
 }
+
+// WithEmulatorFactory sets a factory for creating in-process emulators.
+// When set, takes precedence over AddonManager for emulator creation.
+func WithEmulatorFactory(f EmulatorFactory) Option {
+	return func(s *Service) { s.emulatorFactory = f }
+}

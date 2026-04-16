@@ -623,6 +623,52 @@ func TestService_MetaGetAllNotFound(t *testing.T) {
 	assert.ErrorIs(t, err, ErrSessionNotFound)
 }
 
+type fakeEmulatorFactory struct {
+	createFn func(sessionID string, cols, rows int) ScreenEmulator
+	closed   bool
+}
+
+func (f *fakeEmulatorFactory) Create(sessionID string, cols, rows int) ScreenEmulator {
+	if f.createFn != nil {
+		return f.createFn(sessionID, cols, rows)
+	}
+	return NoneEmulator{}
+}
+
+func (f *fakeEmulatorFactory) Close() {
+	f.closed = true
+}
+
+func TestService_EmulatorFactory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	var createdID string
+	var createdCols, createdRows int
+
+	fakeFactory := &fakeEmulatorFactory{
+		createFn: func(sessionID string, cols, rows int) ScreenEmulator {
+			createdID = sessionID
+			createdCols = cols
+			createdRows = rows
+			return NoneEmulator{}
+		},
+	}
+
+	svc := NewService(&pty.UnixSpawner{}, WithEmulatorFactory(fakeFactory))
+	_, err := svc.Create("factory-test", CreateOptions{
+		Shell: "/bin/sh",
+		Cols:  120,
+		Rows:  40,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "factory-test", createdID)
+	assert.Equal(t, 120, createdCols)
+	assert.Equal(t, 40, createdRows)
+}
+
 func TestService_MetaGetAllReturnsDefensiveCopy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("PTY not supported on Windows")
