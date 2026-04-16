@@ -2,6 +2,30 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.4](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.4) - 2026-04-16
+
+### Bug Fixes
+
+- Wire AddonManager in daemon when emulatorBackend is xterm
+- Resolve data race in mockAddonProcess stdin access
+
+### Documentation
+
+- Add WithXtermBinPath to embedded daemon integration guide
+
+### Features
+
+- Add CommandProcessStarter for addon process spawning
+
+### Refactoring
+
+- Export NewAddonManager for use by daemon wiring
+
+### Testing
+
+- Replace bug-documentation tests with regression guards
+- Add E2E tests for Attach snapshot with xterm addon
+
 ## [0.1.0-beta.3](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.3) - 2026-04-16
 
 ### Bug Fixes
