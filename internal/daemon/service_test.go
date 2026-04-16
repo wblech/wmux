@@ -2826,9 +2826,9 @@ func (n *noopSessionManager) Snapshot(_ string) (SnapshotData, error) {
 func (n *noopSessionManager) LastActivity(_ string) (time.Time, error)       { return time.Time{}, nil }
 func (n *noopSessionManager) MetaSet(_, _, _ string) error                   { return nil }
 func (n *noopSessionManager) MetaGet(_, _ string) (string, error)            { return "", nil }
-func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error)    { return nil, nil }
-func (n *noopSessionManager) UpdateEmulatorScrollback(_ string, _ int) error    { return nil }
-func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))            {}
+func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error) { return nil, nil }
+func (n *noopSessionManager) UpdateEmulatorScrollback(_ string, _ int) error { return nil }
+func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))         {}
 
 // snapshotSpySessionManager extends noopSessionManager to return configurable
 // snapshot data. Used to test handleAttach snapshot population.

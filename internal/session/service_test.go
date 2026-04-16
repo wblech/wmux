@@ -670,6 +670,61 @@ func TestService_EmulatorFactory(t *testing.T) {
 	assert.Equal(t, 40, createdRows)
 }
 
+type scrollbackEmulator struct {
+	NoneEmulator
+	scrollback int
+}
+
+func (e *scrollbackEmulator) SetScrollbackSize(lines int) {
+	e.scrollback = lines
+}
+
+func TestService_UpdateEmulatorScrollback(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	spy := &scrollbackEmulator{
+		NoneEmulator: NoneEmulator{},
+		scrollback:   0,
+	}
+	fakeFactory := &fakeEmulatorFactory{
+		createFn: func(sessionID string, cols, rows int) ScreenEmulator {
+			return spy
+		},
+		closed: false,
+	}
+
+	svc := NewService(&pty.UnixSpawner{}, WithEmulatorFactory(fakeFactory))
+	opts := defaultCreateOpts()
+	_, err := svc.Create("scroll-test", opts)
+	require.NoError(t, err)
+
+	err = svc.UpdateEmulatorScrollback("scroll-test", 50000)
+	require.NoError(t, err)
+	assert.Equal(t, 50000, spy.scrollback)
+}
+
+func TestService_UpdateEmulatorScrollback_NotFound(t *testing.T) {
+	svc := NewService(&pty.UnixSpawner{})
+	err := svc.UpdateEmulatorScrollback("ghost", 10000)
+	assert.ErrorIs(t, err, ErrSessionNotFound)
+}
+
+func TestService_UpdateEmulatorScrollback_NotConfigurable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	svc := NewService(&pty.UnixSpawner{})
+	opts := defaultCreateOpts()
+	_, err := svc.Create("none-scroll", opts)
+	require.NoError(t, err)
+
+	err = svc.UpdateEmulatorScrollback("none-scroll", 50000)
+	assert.ErrorIs(t, err, ErrScrollbackNotConfigurable)
+}
+
 func TestService_MetaGetAllReturnsDefensiveCopy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("PTY not supported on Windows")

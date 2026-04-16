@@ -537,7 +537,7 @@ func TestE2E_CharmVT_UpdateEmulatorScrollback(t *testing.T) {
 
 	// Update scrollback size — should succeed with charmvt.
 	err = c.UpdateEmulatorScrollback("scroll-update", 50000)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Verify session still works after update.
 	result, err := c.Attach("scroll-update")
@@ -561,7 +561,7 @@ func TestE2E_NoneBackend_UpdateEmulatorScrollback_Fails(t *testing.T) {
 
 	// Should fail — NoneEmulator doesn't implement ScrollbackConfigurable.
 	err = c.UpdateEmulatorScrollback("none-scroll", 50000)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "scrollback")
 }
 

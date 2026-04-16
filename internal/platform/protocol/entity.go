@@ -15,34 +15,34 @@ type MessageType byte
 
 // Message type constants for all supported wmux protocol messages.
 const (
-	MsgData         MessageType = 0x01
-	MsgCreate       MessageType = 0x02
-	MsgAttach       MessageType = 0x03
-	MsgDetach       MessageType = 0x04
-	MsgKill         MessageType = 0x05
-	MsgResize       MessageType = 0x06
-	MsgList         MessageType = 0x07
-	MsgInfo         MessageType = 0x08
-	MsgInput        MessageType = 0x09
-	MsgEvent        MessageType = 0x0A
-	MsgHeartbeat    MessageType = 0x0B
-	MsgHeartbeatAck MessageType = 0x0C
-	MsgError        MessageType = 0x0D
-	MsgOK           MessageType = 0x0E
-	MsgShutdown     MessageType = 0x0F
-	MsgAuth         MessageType = 0x10
-	MsgStatus       MessageType = 0x11
-	MsgMetaSet      MessageType = 0x12
-	MsgMetaGet      MessageType = 0x13
-	MsgEnvForward   MessageType = 0x14
-	MsgExec         MessageType = 0x15
-	MsgExecSync     MessageType = 0x16
-	MsgWait         MessageType = 0x17
-	MsgRecord       MessageType = 0x18
-	MsgHistory      MessageType = 0x19
-	MsgHistoryEnd   MessageType = 0x1A
-	MsgKillPrefix                MessageType = 0x1B
-	MsgUpdateEmulatorScrollback  MessageType = 0x1C
+	MsgData                     MessageType = 0x01
+	MsgCreate                   MessageType = 0x02
+	MsgAttach                   MessageType = 0x03
+	MsgDetach                   MessageType = 0x04
+	MsgKill                     MessageType = 0x05
+	MsgResize                   MessageType = 0x06
+	MsgList                     MessageType = 0x07
+	MsgInfo                     MessageType = 0x08
+	MsgInput                    MessageType = 0x09
+	MsgEvent                    MessageType = 0x0A
+	MsgHeartbeat                MessageType = 0x0B
+	MsgHeartbeatAck             MessageType = 0x0C
+	MsgError                    MessageType = 0x0D
+	MsgOK                       MessageType = 0x0E
+	MsgShutdown                 MessageType = 0x0F
+	MsgAuth                     MessageType = 0x10
+	MsgStatus                   MessageType = 0x11
+	MsgMetaSet                  MessageType = 0x12
+	MsgMetaGet                  MessageType = 0x13
+	MsgEnvForward               MessageType = 0x14
+	MsgExec                     MessageType = 0x15
+	MsgExecSync                 MessageType = 0x16
+	MsgWait                     MessageType = 0x17
+	MsgRecord                   MessageType = 0x18
+	MsgHistory                  MessageType = 0x19
+	MsgHistoryEnd               MessageType = 0x1A
+	MsgKillPrefix               MessageType = 0x1B
+	MsgUpdateEmulatorScrollback MessageType = 0x1C
 )
 
 // String returns the lowercase name of the message type.
