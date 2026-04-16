@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -16,12 +17,17 @@ import (
 	"github.com/wblech/wmux/internal/transport"
 )
 
+// ErrRequestTimeout is returned when an RPC does not receive a response
+// within the configured timeout.
+var ErrRequestTimeout = errors.New("client: request timeout")
+
 // Client is a connection to a wmux daemon.
 type Client struct {
 	mu    sync.Mutex // protects handler fields
 	rpcMu sync.Mutex // serializes RPC write+wait pairs
 
-	clientID string
+	clientID   string
+	rpcTimeout time.Duration
 
 	ctrlConn   net.Conn
 	ctrl       *protocol.Conn
@@ -180,6 +186,7 @@ func connect(cfg *config) (*Client, error) {
 		mu:          sync.Mutex{},
 		rpcMu:       sync.Mutex{},
 		clientID:    clientID,
+		rpcTimeout:  cfg.rpcTimeout,
 		ctrlConn:    ctrlConn,
 		ctrl:        ctrl,
 		streamConn:  streamConn,
@@ -221,6 +228,7 @@ func (c *Client) Close() error {
 }
 
 // sendRequest sends a control frame and waits for the demuxed response.
+// Returns ErrRequestTimeout if the daemon does not respond within rpcTimeout.
 func (c *Client) sendRequest(msgType protocol.MessageType, payload []byte) (protocol.Frame, error) {
 	c.rpcMu.Lock()
 	defer c.rpcMu.Unlock()
@@ -233,10 +241,22 @@ func (c *Client) sendRequest(msgType protocol.MessageType, payload []byte) (prot
 		return protocol.Frame{}, fmt.Errorf("client: write: %w", err)
 	}
 
-	resp, ok := <-c.responses
-	if !ok {
-		return protocol.Frame{}, fmt.Errorf("client: connection closed")
-	}
+	select {
+	case resp, ok := <-c.responses:
+		if !ok {
+			return protocol.Frame{}, fmt.Errorf("client: connection closed")
+		}
+		return resp, nil
 
-	return resp, nil
+	case <-time.After(c.rpcTimeout):
+		// Drain the stale response in the background so the next RPC
+		// does not receive a mismatched response from this timed-out request.
+		go func() {
+			select {
+			case <-c.responses:
+			case <-c.done:
+			}
+		}()
+		return protocol.Frame{}, ErrRequestTimeout
+	}
 }

@@ -1,5 +1,7 @@
 package client
 
+import "time"
+
 // Option configures a client or daemon instance.
 type Option func(*config)
 
@@ -13,6 +15,7 @@ type config struct {
 	coldRestore       bool
 	maxScrollbackSize int64
 	autoStart         bool
+	rpcTimeout        time.Duration
 	emulatorFactory   EmulatorFactory
 }
 
@@ -27,6 +30,7 @@ func newConfig(opts ...Option) *config {
 		coldRestore:       false,
 		maxScrollbackSize: 0,
 		autoStart:         true,
+		rpcTimeout:        10 * time.Second,
 		emulatorFactory:   nil,
 	}
 	for _, o := range opts {
@@ -79,4 +83,11 @@ func WithMaxScrollbackSize(n int64) Option {
 // This is the primary integration point for addon modules.
 func WithEmulatorFactory(f EmulatorFactory) Option {
 	return func(c *config) { c.emulatorFactory = f }
+}
+
+// WithRPCTimeout sets the maximum time to wait for a daemon response.
+// If the daemon does not respond within this duration, the RPC returns
+// ErrRequestTimeout. Default is 10 seconds.
+func WithRPCTimeout(d time.Duration) Option {
+	return func(c *config) { c.rpcTimeout = d }
 }
