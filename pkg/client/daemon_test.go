@@ -91,7 +91,6 @@ func TestParseDaemonArgs(t *testing.T) {
 		"--data-dir", "/tmp/data",
 		"--cold-restore",
 		"--max-scrollback", "1048576",
-		"--emulator-backend", "xterm",
 	}
 	opts := parseDaemonArgs(args)
 
@@ -103,18 +102,6 @@ func TestParseDaemonArgs(t *testing.T) {
 	assert.Equal(t, "/tmp/data", cfg.dataDir)
 	assert.True(t, cfg.coldRestore)
 	assert.Equal(t, int64(1048576), cfg.maxScrollbackSize)
-	assert.Equal(t, "xterm", cfg.emulatorBackend)
-}
-
-func TestNewDaemon_InvalidBackend(t *testing.T) {
-	dir := shortTempDir(t)
-	_, err := NewDaemon(
-		WithBaseDir(dir),
-		WithNamespace("test"),
-		WithEmulatorBackend("invalid"),
-	)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "unknown emulator backend")
 }
 
 func TestNew_AutoStart(t *testing.T) {
@@ -147,9 +134,8 @@ func TestBuildDaemonArgs(t *testing.T) {
 		dataDir:           "/tmp/wmux/watchtower/sessions",
 		coldRestore:       true,
 		maxScrollbackSize: 1048576,
-		emulatorBackend:   "xterm",
-		xtermBinPath:      "/usr/local/bin/wmux-emulator-xterm",
 		autoStart:         true,
+		emulatorFactory:   nil,
 	}
 
 	args := buildDaemonArgs(cfg)
@@ -165,10 +151,8 @@ func TestBuildDaemonArgs(t *testing.T) {
 	assert.Contains(t, args, "--cold-restore")
 	assert.Contains(t, args, "--max-scrollback")
 	assert.Contains(t, args, "1048576")
-	assert.Contains(t, args, "--emulator-backend")
-	assert.Contains(t, args, "xterm")
-	assert.Contains(t, args, "--xterm-bin")
-	assert.Contains(t, args, "/usr/local/bin/wmux-emulator-xterm")
+	assert.NotContains(t, args, "--emulator-backend")
+	assert.NotContains(t, args, "--xterm-bin")
 }
 
 func TestNewDaemon_SessionOperations(t *testing.T) {
@@ -263,9 +247,8 @@ func TestBuildDaemonArgs_Defaults(t *testing.T) {
 		dataDir:           "/tmp/sessions",
 		coldRestore:       false,
 		maxScrollbackSize: 0,
-		emulatorBackend:   "none",
-		xtermBinPath:      "",
 		autoStart:         true,
+		emulatorFactory:   nil,
 	}
 
 	args := buildDaemonArgs(cfg)
@@ -276,4 +259,5 @@ func TestBuildDaemonArgs_Defaults(t *testing.T) {
 	assert.NotContains(t, args, "--cold-restore")
 	assert.NotContains(t, args, "--max-scrollback")
 	assert.NotContains(t, args, "--emulator-backend")
+	assert.NotContains(t, args, "--xterm-bin")
 }

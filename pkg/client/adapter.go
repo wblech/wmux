@@ -190,3 +190,39 @@ func toInfo(sess session.Session) daemon.SessionInfo {
 		Shell: sess.Shell,
 	}
 }
+
+// emulatorFactoryAdapter wraps a client.EmulatorFactory to implement
+// session.EmulatorFactory, bridging the public and internal types.
+type emulatorFactoryAdapter struct {
+	f EmulatorFactory
+}
+
+func (a *emulatorFactoryAdapter) Create(sessionID string, cols, rows int) session.ScreenEmulator {
+	return &screenEmulatorAdapter{em: a.f.Create(sessionID, cols, rows)}
+}
+
+func (a *emulatorFactoryAdapter) Close() {
+	a.f.Close()
+}
+
+// screenEmulatorAdapter wraps a client.ScreenEmulator to implement
+// session.ScreenEmulator, converting Snapshot types.
+type screenEmulatorAdapter struct {
+	em ScreenEmulator
+}
+
+func (a *screenEmulatorAdapter) Process(data []byte) {
+	a.em.Process(data)
+}
+
+func (a *screenEmulatorAdapter) Snapshot() session.Snapshot {
+	snap := a.em.Snapshot()
+	return session.Snapshot{
+		Scrollback: snap.Scrollback,
+		Viewport:   snap.Viewport,
+	}
+}
+
+func (a *screenEmulatorAdapter) Resize(cols, rows int) {
+	a.em.Resize(cols, rows)
+}

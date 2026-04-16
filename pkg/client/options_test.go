@@ -16,7 +16,7 @@ func TestDefaults(t *testing.T) {
 	assert.True(t, cfg.autoStart)
 	assert.False(t, cfg.coldRestore)
 	assert.Equal(t, int64(0), cfg.maxScrollbackSize)
-	assert.Equal(t, "none", cfg.emulatorBackend)
+	assert.Nil(t, cfg.emulatorFactory)
 }
 
 func TestWithNamespace(t *testing.T) {
@@ -59,20 +59,31 @@ func TestWithMaxScrollbackSize(t *testing.T) {
 	assert.Equal(t, int64(10*1024*1024), cfg.maxScrollbackSize)
 }
 
-func TestWithEmulatorBackend(t *testing.T) {
-	cfg := newConfig(WithEmulatorBackend("xterm"))
-	assert.Equal(t, "xterm", cfg.emulatorBackend)
+func TestWithEmulatorFactory(t *testing.T) {
+	factory := &fakeEmulatorFactory{}
+	cfg := newConfig(WithEmulatorFactory(factory))
+	assert.Equal(t, factory, cfg.emulatorFactory)
 }
 
 func TestMultipleOptions(t *testing.T) {
+	factory := &fakeEmulatorFactory{}
 	cfg := newConfig(
 		WithNamespace("watchtower"),
 		WithColdRestore(true),
-		WithEmulatorBackend("xterm"),
+		WithEmulatorFactory(factory),
 		WithMaxScrollbackSize(1024),
 	)
 	assert.Equal(t, "watchtower", cfg.namespace)
 	assert.True(t, cfg.coldRestore)
-	assert.Equal(t, "xterm", cfg.emulatorBackend)
+	assert.Equal(t, factory, cfg.emulatorFactory)
 	assert.Equal(t, int64(1024), cfg.maxScrollbackSize)
 }
+
+// fakeEmulatorFactory is a test double for EmulatorFactory.
+type fakeEmulatorFactory struct{}
+
+func (f *fakeEmulatorFactory) Create(_ string, _, _ int) ScreenEmulator {
+	return nil
+}
+
+func (f *fakeEmulatorFactory) Close() {}

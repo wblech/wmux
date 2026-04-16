@@ -29,13 +29,6 @@ func NewDaemon(opts ...Option) (*Daemon, error) {
 	cfg := newConfig(opts...)
 	resolveConfig(cfg)
 
-	switch cfg.emulatorBackend {
-	case "none", "xterm":
-		// valid
-	default:
-		return nil, fmt.Errorf("client: unknown emulator backend %q (valid: none, xterm)", cfg.emulatorBackend)
-	}
-
 	nsDir := filepath.Dir(cfg.socket)
 	if err := os.MkdirAll(nsDir, 0o700); err != nil {
 		return nil, fmt.Errorf("client: create namespace dir: %w", err)
@@ -70,10 +63,10 @@ func (d *Daemon) Serve(ctx context.Context) error {
 	spawner := &pty.UnixSpawner{}
 
 	var sessionOpts []session.Option
-	if d.cfg.emulatorBackend == "xterm" && d.cfg.xtermBinPath != "" {
-		starter := session.NewCommandProcessStarter("node", d.cfg.xtermBinPath)
-		mgr := session.NewAddonManager(starter)
-		sessionOpts = append(sessionOpts, session.WithAddonManager(mgr))
+	if d.cfg.emulatorFactory != nil {
+		sessionOpts = append(sessionOpts, session.WithEmulatorFactory(
+			&emulatorFactoryAdapter{f: d.cfg.emulatorFactory},
+		))
 	}
 	sessionSvc := session.NewService(spawner, sessionOpts...)
 
@@ -181,16 +174,6 @@ func parseDaemonArgs(args []string) []Option {
 				if err == nil {
 					opts = append(opts, WithMaxScrollbackSize(n))
 				}
-				i++
-			}
-		case "--emulator-backend":
-			if i+1 < len(args) {
-				opts = append(opts, WithEmulatorBackend(args[i+1]))
-				i++
-			}
-		case "--xterm-bin":
-			if i+1 < len(args) {
-				opts = append(opts, WithXtermBinPath(args[i+1]))
 				i++
 			}
 		}

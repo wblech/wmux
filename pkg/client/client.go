@@ -125,13 +125,6 @@ func buildDaemonArgs(cfg *config) []string {
 	if cfg.maxScrollbackSize > 0 {
 		args = append(args, "--max-scrollback", strconv.FormatInt(cfg.maxScrollbackSize, 10))
 	}
-	if cfg.emulatorBackend != "none" {
-		args = append(args, "--emulator-backend", cfg.emulatorBackend)
-	}
-	if cfg.xtermBinPath != "" {
-		args = append(args, "--xterm-bin", cfg.xtermBinPath)
-	}
-
 	return args
 }
 

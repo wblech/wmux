@@ -12,9 +12,8 @@ type config struct {
 	dataDir           string
 	coldRestore       bool
 	maxScrollbackSize int64
-	emulatorBackend   string
-	xtermBinPath      string
 	autoStart         bool
+	emulatorFactory   EmulatorFactory
 }
 
 // newConfig creates a config with defaults and applies the given options.
@@ -27,9 +26,8 @@ func newConfig(opts ...Option) *config {
 		dataDir:           "",
 		coldRestore:       false,
 		maxScrollbackSize: 0,
-		emulatorBackend:   "none",
-		xtermBinPath:      "",
 		autoStart:         true,
+		emulatorFactory:   nil,
 	}
 	for _, o := range opts {
 		o(cfg)
@@ -77,12 +75,8 @@ func WithMaxScrollbackSize(n int64) Option {
 	return func(c *config) { c.maxScrollbackSize = n }
 }
 
-// WithEmulatorBackend sets the terminal emulator backend to use.
-func WithEmulatorBackend(backend string) Option {
-	return func(c *config) { c.emulatorBackend = backend }
-}
-
-// WithXtermBinPath sets the path to the xterm addon binary.
-func WithXtermBinPath(path string) Option {
-	return func(c *config) { c.xtermBinPath = path }
+// WithEmulatorFactory configures a custom emulator factory.
+// This is the primary integration point for addon modules.
+func WithEmulatorFactory(f EmulatorFactory) Option {
+	return func(c *config) { c.emulatorFactory = f }
 }
