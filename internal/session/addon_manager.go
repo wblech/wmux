@@ -19,7 +19,7 @@ type AddonManager struct {
 }
 
 // newAddonManager creates an AddonManager with the given process starter.
-func newAddonManager(starter ProcessStarter) *AddonManager {
+func NewAddonManager(starter ProcessStarter) *AddonManager {
 	return &AddonManager{
 		mu:      sync.Mutex{},
 		starter: starter,
