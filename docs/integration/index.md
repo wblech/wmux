@@ -94,6 +94,71 @@ All options work with both `client.New()` and `client.NewDaemon()`.
 | `WithMaxScrollbackSize(n int64)` | `0` (unlimited) | Max scrollback bytes per session |
 | `WithEmulatorFactory(f EmulatorFactory)` | `nil` | Emulator backend via addon module (e.g., `charmvt.Backend()`) |
 
+## Addons
+
+Emulator addons provide server-side terminal state tracking (scrollback and
+viewport snapshots). Without an addon, `Attach()` returns empty snapshots.
+
+Addons are **optional, separate Go modules** — your binary only includes an
+addon if you import it.
+
+### charmvt (recommended)
+
+Pure Go terminal emulator. No external dependencies (no Node.js). Uses
+[charmbracelet/x/vt](https://github.com/charmbracelet/x) under the hood.
+
+**Install:**
+
+```bash
+go get github.com/wblech/wmux/addons/charmvt
+```
+
+**Use:**
+
+```go
+import (
+    "github.com/wblech/wmux/pkg/client"
+    "github.com/wblech/wmux/addons/charmvt"
+)
+
+// Embedded daemon with emulator addon.
+d, err := client.NewDaemon(
+    client.WithNamespace("myapp"),
+    charmvt.Backend(),
+)
+
+// Or with options.
+d, err := client.NewDaemon(
+    charmvt.Backend(
+        charmvt.WithScrollbackSize(50000),
+        charmvt.WithCallbacks(charmvt.Callbacks{
+            Title: func(sid, title string) {
+                log.Printf("session %s: %s", sid, title)
+            },
+        }),
+    ),
+)
+```
+
+### Writing your own addon
+
+Implement the `client.EmulatorFactory` interface:
+
+```go
+type EmulatorFactory interface {
+    Create(sessionID string, cols, rows int) ScreenEmulator
+    Close()
+}
+
+type ScreenEmulator interface {
+    Process(data []byte)
+    Snapshot() Snapshot
+    Resize(cols, rows int)
+}
+```
+
+Pass it via `client.WithEmulatorFactory(yourFactory)`.
+
 ## Further reading
 
 - [Session Operations](session-operations.md) -- create, attach, write, resize, list, kill
