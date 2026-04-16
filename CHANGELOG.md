@@ -2,7 +2,17 @@
 
 All notable changes to wmux are documented in this file.
 
-## [0.1.0-beta.5](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.5) - 2026-04-16
+## [0.1.0-beta.6](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.6) - 2026-04-16
+
+### Documentation
+
+- Update persistent-daemon guide for ServeDaemon options
+
+### Features
+
+- Accept integrator options in ServeDaemon *(client)*
+
+## [addons/charmvt/v0.1.0-beta.1](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.1.0-beta.1) - 2026-04-16
 
 ### Bug Fixes
 
