@@ -70,6 +70,12 @@ type EmulatorFactory interface {
 	Close()
 }
 
+// ScrollbackConfigurable is an optional interface that ScreenEmulator
+// implementations may support to allow runtime scrollback size changes.
+type ScrollbackConfigurable interface {
+	SetScrollbackSize(lines int)
+}
+
 // Session holds the state and metadata for a managed terminal session.
 type Session struct {
 	// ID is the unique identifier for the session.
@@ -116,4 +122,6 @@ var (
 	ErrSessionNotAlive = errors.New("session not alive or detached")
 	// ErrInvalidPrefix is returned when a session prefix fails validation.
 	ErrInvalidPrefix = errors.New("invalid session prefix")
+	// ErrScrollbackNotConfigurable is returned when the emulator does not support scrollback configuration.
+	ErrScrollbackNotConfigurable = errors.New("emulator does not support scrollback configuration")
 )

@@ -368,6 +368,27 @@ func (s *Service) Resize(id string, cols, rows int) error {
 	return nil
 }
 
+// UpdateEmulatorScrollback changes the scrollback buffer size of a running
+// session. Returns ErrScrollbackNotConfigurable if the emulator does not
+// support it.
+func (s *Service) UpdateEmulatorScrollback(id string, scrollbackLines int) error {
+	s.mu.RLock()
+	ms, ok := s.sessions[id]
+	s.mu.RUnlock()
+
+	if !ok {
+		return ErrSessionNotFound
+	}
+
+	cfg, ok := ms.emulator.(ScrollbackConfigurable)
+	if !ok {
+		return ErrScrollbackNotConfigurable
+	}
+
+	cfg.SetScrollbackSize(scrollbackLines)
+	return nil
+}
+
 // WriteInput sends data as input to the PTY process of the session.
 // Returns ErrSessionNotFound if the session does not exist.
 func (s *Service) WriteInput(id string, data []byte) error {
