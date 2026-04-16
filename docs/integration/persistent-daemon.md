@@ -23,19 +23,22 @@ import (
     "log"
     "os"
 
+    "github.com/wblech/wmux/addons/charmvt"
     "github.com/wblech/wmux/pkg/client"
 )
 
 func main() {
     // If this process was spawned as a daemon, run it and exit.
-    if handled, err := client.ServeDaemon(os.Args); handled {
+    // Pass addon options here — they are created in-process in the
+    // daemon and survive the integrator app's lifecycle.
+    if handled, err := client.ServeDaemon(os.Args, charmvt.Backend()); handled {
         if err != nil {
             log.Fatal(err)
         }
         return
     }
 
-    // Normal application startup.
+    // Normal application startup — no addon options needed here.
     c, err := client.New(
         client.WithNamespace("watchtower"),
     )
@@ -65,15 +68,18 @@ func main() {
    (`__wmux_daemon__`).
 3. The child process detaches into its own session (`setsid`) so it is not
    killed when the parent exits.
-4. `ServeDaemon(os.Args)` in the child detects the sentinel, parses the
-   forwarded options, and calls `Daemon.Serve`. It blocks until the daemon
-   receives a termination signal.
+4. `ServeDaemon(os.Args, ...)` in the child detects the sentinel, parses the
+   forwarded flags, merges any integrator-provided options (e.g. emulator
+   factories), and calls `Daemon.Serve`. It blocks until the daemon receives
+   a termination signal.
 5. Back in the parent, `New` polls the socket and connects once the daemon is
    ready (timeout: 3 seconds).
 
 Because the daemon is your own compiled binary, there are no external
-dependencies to install or manage. The namespace, emulator backend, and all
-other options are forwarded through CLI flags automatically.
+dependencies to install or manage. Scalar configuration (namespace, socket
+path, cold-restore, scrollback size) is forwarded through CLI flags
+automatically. Non-serializable options like emulator factories are provided
+by the integrator via `ServeDaemon`'s extra options parameter.
 
 ## Lifecycle
 
