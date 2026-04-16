@@ -191,6 +191,10 @@ func toInfo(sess session.Session) daemon.SessionInfo {
 	}
 }
 
+func (a *sessionAdapter) UpdateEmulatorScrollback(id string, scrollbackLines int) error {
+	return a.svc.UpdateEmulatorScrollback(id, scrollbackLines) //nolint:wrapcheck
+}
+
 // emulatorFactoryAdapter wraps a client.EmulatorFactory to implement
 // session.EmulatorFactory, bridging the public and internal types.
 type emulatorFactoryAdapter struct {

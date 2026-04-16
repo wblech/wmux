@@ -161,6 +161,24 @@ func (c *Client) Resize(sessionID string, cols, rows int) error {
 	return nil
 }
 
+// UpdateEmulatorScrollback changes the scrollback buffer size of a running
+// session. Returns an error if the emulator backend does not support it.
+func (c *Client) UpdateEmulatorScrollback(sessionID string, scrollbackLines int) error {
+	payload, _ := json.Marshal(struct {
+		SessionID       string `json:"session_id"`
+		ScrollbackLines int    `json:"scrollback_lines"`
+	}{SessionID: sessionID, ScrollbackLines: scrollbackLines})
+
+	resp, err := c.sendRequest(protocol.MsgUpdateEmulatorScrollback, payload)
+	if err != nil {
+		return fmt.Errorf("update emulator scrollback: %w", err)
+	}
+	if resp.Type == protocol.MsgError {
+		return c.parseError(resp)
+	}
+	return nil
+}
+
 // List returns all sessions, optionally filtered by options.
 func (c *Client) List(opts ...ListOption) ([]SessionInfo, error) {
 	cfg := &listConfig{prefix: ""}
