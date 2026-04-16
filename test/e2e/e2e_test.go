@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/wblech/wmux/addons/charmvt"
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/event"
@@ -406,6 +407,112 @@ func TestE2E_DetachReattachPreservesSnapshot(t *testing.T) {
 	assert.NotNil(t, result2.Snapshot.Viewport,
 		"E2E: Reattach must return snapshot — terminal state is not lost on detach")
 	assert.Contains(t, string(result2.Snapshot.Viewport), "reattach-test")
+}
+
+// startTestDaemonWithCharmVT creates a daemon using client.NewDaemon with charmvt.Backend(),
+// exercising the full SDK integration path that consumers use.
+func startTestDaemonWithCharmVT(t *testing.T) *testDaemonEnv {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	dir, err := os.MkdirTemp("", "wmux-e2e-charmvt")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	d, err := client.NewDaemon(
+		client.WithBaseDir(dir),
+		client.WithNamespace("test"),
+		charmvt.Backend(),
+	)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error, 1)
+	go func() { errCh <- d.Serve(ctx) }()
+
+	// Derive paths from namespace resolution.
+	sock := filepath.Join(dir, "test", "daemon.sock")
+	tokenPath := filepath.Join(dir, "test", "daemon.token")
+
+	// Wait for socket readiness.
+	require.Eventually(t, func() bool {
+		_, statErr := os.Stat(sock)
+		return statErr == nil
+	}, 3*time.Second, 50*time.Millisecond)
+
+	t.Cleanup(func() {
+		cancel()
+		<-errCh
+	})
+
+	return &testDaemonEnv{
+		SocketPath: sock,
+		TokenPath:  tokenPath,
+	}
+}
+
+func TestE2E_CharmVT_AttachReturnsSnapshot(t *testing.T) {
+	env := startTestDaemonWithCharmVT(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("charmvt-snap", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo hello-charmvt && sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	var result client.AttachResult
+	require.Eventually(t, func() bool {
+		result, err = c.Attach("charmvt-snap")
+		if err != nil || result.Snapshot.Viewport == nil {
+			return false
+		}
+		return strings.Contains(string(result.Snapshot.Viewport), "hello-charmvt")
+	}, 5*time.Second, 200*time.Millisecond,
+		"E2E: charmvt Attach must return viewport containing the echoed text")
+
+	assert.Equal(t, "charmvt-snap", result.Session.ID)
+}
+
+func TestE2E_CharmVT_DetachReattachPreservesSnapshot(t *testing.T) {
+	env := startTestDaemonWithCharmVT(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("charmvt-reattach", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo reattach-charmvt && sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	var result1 client.AttachResult
+	require.Eventually(t, func() bool {
+		result1, err = c.Attach("charmvt-reattach")
+		if err != nil || result1.Snapshot.Viewport == nil {
+			return false
+		}
+		return strings.Contains(string(result1.Snapshot.Viewport), "reattach-charmvt")
+	}, 5*time.Second, 200*time.Millisecond,
+		"E2E: initial Attach must return viewport containing the echoed text")
+
+	require.NoError(t, c.Detach("charmvt-reattach"))
+
+	result2, err := c.Attach("charmvt-reattach")
+	require.NoError(t, err)
+
+	assert.NotNil(t, result2.Snapshot.Viewport,
+		"E2E: Reattach must return snapshot — terminal state is not lost on detach")
+	assert.Contains(t, string(result2.Snapshot.Viewport), "reattach-charmvt")
 }
 
 func TestE2E_NoneBackend_EmptySnapshot(t *testing.T) {
