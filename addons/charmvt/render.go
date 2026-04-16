@@ -23,7 +23,7 @@ func renderScrollback(term *vt.SafeEmulator, cols int) []byte {
 
 	for y := range sbLen {
 		if y > 0 {
-			buf.WriteByte('\n')
+			buf.WriteString("\r\n")
 		}
 
 		// Reset style at the start of each line for robustness.

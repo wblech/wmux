@@ -125,7 +125,7 @@ func TestRenderScrollback_TrailingSpacesTrimmed(t *testing.T) {
 	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
 
 	sb := string(snap.Scrollback)
-	lines := strings.Split(sb, "\n")
+	lines := strings.Split(sb, "\r\n")
 
 	for _, line := range lines {
 		// Strip any ANSI sequences before checking trailing spaces so that reset
@@ -134,6 +134,31 @@ func TestRenderScrollback_TrailingSpacesTrimmed(t *testing.T) {
 		assert.Equal(t, strings.TrimRight(plain, " "), plain,
 			"scrollback line should have no trailing spaces: %q", plain)
 	}
+}
+
+// TestRenderScrollback_TerminalLineEndings verifies that scrollback uses \r\n line endings.
+func TestRenderScrollback_TerminalLineEndings(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.scrollback = 1000
+
+	em := newEmulator("render-crlf", 80, 3, cfg)
+
+	for i := range 10 {
+		em.Process([]byte(fmt.Sprintf("line %02d\r\n", i)))
+	}
+
+	snap := em.Snapshot()
+	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
+
+	sb := string(snap.Scrollback)
+
+	// Must contain \r\n between lines.
+	assert.Contains(t, sb, "\r\n", "scrollback should use \\r\\n line endings")
+
+	// Must not contain bare \n (not preceded by \r).
+	cleaned := strings.ReplaceAll(sb, "\r\n", "")
+	assert.NotContains(t, cleaned, "\n",
+		"scrollback should not contain bare \\n outside of \\r\\n pairs")
 }
 
 // stripANSI removes ANSI escape sequences from a string for comparison purposes.
