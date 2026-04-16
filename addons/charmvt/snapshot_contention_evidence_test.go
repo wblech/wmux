@@ -1,8 +1,8 @@
 package charmvt
 
 import (
+	"bytes"
 	"fmt"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,11 +24,11 @@ func TestRegression_SnapshotUnderContinuousWrites(t *testing.T) {
 
 	em := newEmulator("contention-regression", 200, 24, cfg)
 
-	var setup strings.Builder
+	var setup bytes.Buffer
 	for i := range 5200 {
-		setup.WriteString(fmt.Sprintf("scrollback line %04d with some content for realism\r\n", i))
+		fmt.Fprintf(&setup, "scrollback line %04d with some content for realism\r\n", i)
 	}
-	em.Process([]byte(setup.String()))
+	em.Process(setup.Bytes())
 
 	baseStart := time.Now()
 	baseline := em.Snapshot()
@@ -87,11 +87,11 @@ func TestRegression_SnapshotBaselineWithoutContention(t *testing.T) {
 	cfg.scrollback = 1000
 	em := newEmulator("baseline-regression", 120, 24, cfg)
 
-	var setup strings.Builder
+	var setup bytes.Buffer
 	for i := range 600 {
-		setup.WriteString(fmt.Sprintf("scrollback line %04d\r\n", i))
+		fmt.Fprintf(&setup, "scrollback line %04d\r\n", i)
 	}
-	em.Process([]byte(setup.String()))
+	em.Process(setup.Bytes())
 
 	start := time.Now()
 	snap := em.Snapshot()

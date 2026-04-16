@@ -155,6 +155,7 @@ func TestBuildDaemonArgs(t *testing.T) {
 		coldRestore:       true,
 		maxScrollbackSize: 1048576,
 		autoStart:         true,
+		rpcTimeout:        10 * time.Second,
 		emulatorFactory:   nil,
 	}
 
@@ -268,6 +269,7 @@ func TestBuildDaemonArgs_Defaults(t *testing.T) {
 		coldRestore:       false,
 		maxScrollbackSize: 0,
 		autoStart:         true,
+		rpcTimeout:        10 * time.Second,
 		emulatorFactory:   nil,
 	}
 

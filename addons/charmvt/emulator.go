@@ -45,7 +45,7 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 		term.SetCallbacks(cb)
 	}
 
-	return &emulator{term: term, cols: cols}
+	return &emulator{mu: sync.Mutex{}, term: term, cols: cols}
 }
 
 // Process writes terminal data to the emulator.

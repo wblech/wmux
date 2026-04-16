@@ -40,7 +40,7 @@ func TestRegression_SlowRPCTimesOutInsteadOfBlocking(t *testing.T) {
 		// MsgList: fast response.
 		protocol.MsgList: func(_ []byte) protocol.Frame {
 			return okFrame([]SessionInfo{
-				{ID: "s1", State: "alive"},
+				{ID: "s1", State: "alive", Pid: 0, Cols: 0, Rows: 0, Shell: ""},
 			})
 		},
 	})
@@ -61,7 +61,7 @@ func TestRegression_SlowRPCTimesOutInsteadOfBlocking(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrRequestTimeout)
+	require.ErrorIs(t, err, ErrRequestTimeout)
 	t.Logf("Attach returned error in %v: %v", elapsed, err)
 
 	// After the timeout, List should work (rpcMu released, drain goroutine
@@ -90,7 +90,7 @@ func TestRegression_RPCWithoutContentionIsFast(t *testing.T) {
 	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgList: func(_ []byte) protocol.Frame {
 			return okFrame([]SessionInfo{
-				{ID: "s1", State: "alive"},
+				{ID: "s1", State: "alive", Pid: 0, Cols: 0, Rows: 0, Shell: ""},
 			})
 		},
 	})
