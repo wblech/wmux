@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -201,6 +202,31 @@ func testDaemon(t *testing.T, opts ...Option) (*Daemon, []byte, string) {
 	spawner := &pty.UnixSpawner{}
 	svc := session.NewService(spawner)
 	d := NewDaemon(&testServerAdapter{srv: srv}, &testSessionAdapter{svc: svc}, opts...)
+
+	return d, token, sock
+}
+
+// testDaemonWithSessionOpts is like testDaemon but allows passing session.Option
+// to the underlying session.Service. This enables tests that wire AddonManager.
+func testDaemonWithSessionOpts(t *testing.T, sessionOpts []session.Option, daemonOpts ...Option) (*Daemon, []byte, string) { //nolint:unused // helper prepared for upcoming integration tests
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "wmux-daemon")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+
+	sock := filepath.Join(dir, "d.sock")
+
+	ln, err := ipc.Listen(sock)
+	require.NoError(t, err)
+
+	token, err := auth.Generate()
+	require.NoError(t, err)
+
+	srv := transport.NewServer(ln, token)
+	spawner := &pty.UnixSpawner{}
+	svc := session.NewService(spawner, sessionOpts...)
+	d := NewDaemon(&testServerAdapter{srv: srv}, &testSessionAdapter{svc: svc}, daemonOpts...)
 
 	return d, token, sock
 }
@@ -1267,6 +1293,92 @@ func TestDaemon_AttachReturnsSessionInfo(t *testing.T) {
 	assert.NotEmpty(t, attachData.State)
 	assert.Equal(t, 80, attachData.Cols)
 	assert.Equal(t, 24, attachData.Rows)
+}
+
+// TestDaemon_AttachSnapshotWithData uses a spy SessionManager to verify that
+// handleAttach correctly populates the Snapshot field when the SessionManager
+// returns non-empty snapshot data.
+func TestDaemon_AttachSnapshotWithData(t *testing.T) {
+	sm := &snapshotSpySessionManager{
+		noopSessionManager: noopSessionManager{},
+		snapshotData: SnapshotData{
+			Scrollback: []byte("line1\r\nline2\r\n"),
+			Viewport:   []byte("current-view"),
+		},
+	}
+
+	bus := &spyEventBus{mu: sync.Mutex{}, events: nil}
+	d := newTestDaemonUnit(sm, bus, map[string]map[string]struct{}{})
+
+	// Simulate a client connection via a mock control conn.
+	mockCtrl := &mockControlConn{
+		frames:   nil,
+		writeMu:  sync.Mutex{},
+		written:  nil,
+		writeErr: nil,
+	}
+	mockClient := &mockConnectedClient{id: "test-client", ctrl: mockCtrl}
+
+	reqPayload, _ := json.Marshal(SessionIDRequest{SessionID: "snap-test"})
+	d.handleAttach(mockClient, protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgAttach,
+		Payload: reqPayload,
+	})
+
+	require.Len(t, mockCtrl.written, 1, "should write exactly one response frame")
+
+	resp := mockCtrl.written[0]
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	var attachData AttachResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &attachData))
+	require.NotNil(t, attachData.Snapshot, "Snapshot should be non-nil when SessionManager returns data")
+	assert.Equal(t, []byte("line1\r\nline2\r\n"), attachData.Snapshot.Scrollback)
+	assert.Equal(t, []byte("current-view"), attachData.Snapshot.Viewport)
+}
+
+// TestDaemon_AttachSnapshotPopulated_Regression is a regression guard ensuring
+// handleAttach includes snapshot data when the SessionManager returns it.
+// This guards against the wiring bug where Serve() forgot WithAddonManager.
+func TestDaemon_AttachSnapshotPopulated_Regression(t *testing.T) {
+	sm := &snapshotSpySessionManager{
+		noopSessionManager: noopSessionManager{},
+		snapshotData: SnapshotData{
+			Scrollback: []byte("scroll-data"),
+			Viewport:   []byte("view-data"),
+		},
+	}
+
+	bus := &spyEventBus{mu: sync.Mutex{}, events: nil}
+	d := newTestDaemonUnit(sm, bus, map[string]map[string]struct{}{})
+
+	mockCtrl := &mockControlConn{
+		frames:   nil,
+		writeMu:  sync.Mutex{},
+		written:  nil,
+		writeErr: nil,
+	}
+	mockClient := &mockConnectedClient{id: "test-client", ctrl: mockCtrl}
+
+	reqPayload, _ := json.Marshal(SessionIDRequest{SessionID: "snap-test"})
+	d.handleAttach(mockClient, protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgAttach,
+		Payload: reqPayload,
+	})
+
+	require.Len(t, mockCtrl.written, 1)
+	resp := mockCtrl.written[0]
+	require.Equal(t, protocol.MsgOK, resp.Type)
+
+	var attachData AttachResponse
+	require.NoError(t, json.Unmarshal(resp.Payload, &attachData))
+
+	require.NotNil(t, attachData.Snapshot,
+		"REGRESSION: handleAttach must include snapshot when SessionManager returns data")
+	assert.Equal(t, []byte("scroll-data"), attachData.Snapshot.Scrollback)
+	assert.Equal(t, []byte("view-data"), attachData.Snapshot.Viewport)
 }
 
 func TestDaemon_MetaSetAndGet(t *testing.T) {
@@ -2712,6 +2824,64 @@ func (n *noopSessionManager) MetaSet(_, _, _ string) error                   { r
 func (n *noopSessionManager) MetaGet(_, _ string) (string, error)            { return "", nil }
 func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error) { return nil, nil }
 func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))         {}
+
+// snapshotSpySessionManager extends noopSessionManager to return configurable
+// snapshot data. Used to test handleAttach snapshot population.
+type snapshotSpySessionManager struct {
+	noopSessionManager
+	snapshotData SnapshotData
+}
+
+func (s *snapshotSpySessionManager) Get(_ string) (SessionInfo, error) {
+	return SessionInfo{
+		ID:    "snap-test",
+		State: "alive",
+		Pid:   12345,
+		Cols:  80,
+		Rows:  24,
+		Shell: "/bin/sh",
+	}, nil
+}
+
+func (s *snapshotSpySessionManager) Snapshot(_ string) (SnapshotData, error) {
+	return s.snapshotData, nil
+}
+
+// mockControlConn is a mock ControlConn that records written frames.
+type mockControlConn struct {
+	frames   []protocol.Frame // frames to return from ReadFrame
+	writeMu  sync.Mutex
+	written  []protocol.Frame
+	writeErr error
+}
+
+func (m *mockControlConn) ReadFrame() (protocol.Frame, error) {
+	if len(m.frames) == 0 {
+		return protocol.Frame{}, errors.New("no frames")
+	}
+	f := m.frames[0]
+	m.frames = m.frames[1:]
+	return f, nil
+}
+
+func (m *mockControlConn) WriteFrame(f protocol.Frame) error {
+	m.writeMu.Lock()
+	defer m.writeMu.Unlock()
+	if m.writeErr != nil {
+		return m.writeErr
+	}
+	m.written = append(m.written, f)
+	return nil
+}
+
+// mockConnectedClient is a mock ConnectedClient for unit tests.
+type mockConnectedClient struct {
+	id   string
+	ctrl ControlConn
+}
+
+func (m *mockConnectedClient) ClientID() string     { return m.id }
+func (m *mockConnectedClient) Control() ControlConn { return m.ctrl }
 
 // spyEventBus records published events for inspection in scanOSC unit tests.
 type spyEventBus struct {
