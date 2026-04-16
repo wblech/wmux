@@ -11,6 +11,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// syncWriter wraps a bytes.Buffer with a mutex for thread-safe writes.
+type syncWriter struct {
+	mu  *sync.Mutex
+	buf *bytes.Buffer
+}
+
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.Write(p) //nolint:wrapcheck
+}
+
 // mockAddonProcess simulates the addon stdin/stdout for testing.
 type mockAddonProcess struct {
 	stdin  *bytes.Buffer
@@ -28,7 +40,14 @@ func newMockAddonProcess() *mockAddonProcess {
 	}
 }
 
-func (m *mockAddonProcess) Stdin() io.Writer  { return m.stdin }
+func (m *mockAddonProcess) Stdin() io.Writer { return &syncWriter{mu: &m.mu, buf: m.stdin} }
+
+// stdinLen returns the current stdin buffer length in a thread-safe way.
+func (m *mockAddonProcess) stdinLen() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.stdin.Len()
+}
 func (m *mockAddonProcess) Stdout() io.Reader { return m.stdout }
 func (m *mockAddonProcess) Wait() error {
 	m.mu.Lock()

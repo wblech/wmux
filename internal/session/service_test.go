@@ -319,7 +319,7 @@ func TestService_SnapshotWithAddonManager_UsesAddonEmulator(t *testing.T) {
 	// The shell produces at least a prompt, which goes to Process() -> addon stdin.
 	require.Eventually(t, func() bool {
 		proc := starter.processes[0]
-		return proc.stdin.Len() > 0
+		return proc.stdinLen() > 0
 	}, 3*time.Second, 50*time.Millisecond,
 		"REGRESSION: readLoop must feed PTY output to the addon emulator")
 }
