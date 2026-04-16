@@ -515,6 +515,56 @@ func TestE2E_CharmVT_DetachReattachPreservesSnapshot(t *testing.T) {
 	assert.Contains(t, string(result2.Snapshot.Viewport), "reattach-charmvt")
 }
 
+func TestE2E_CharmVT_UpdateEmulatorScrollback(t *testing.T) {
+	env := startTestDaemonWithCharmVT(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("scroll-update", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "echo scrollback-test && sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	// Wait for output to be processed.
+	require.Eventually(t, func() bool {
+		result, attachErr := c.Attach("scroll-update")
+		return attachErr == nil && result.Snapshot.Viewport != nil
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Update scrollback size — should succeed with charmvt.
+	err = c.UpdateEmulatorScrollback("scroll-update", 50000)
+	assert.NoError(t, err)
+
+	// Verify session still works after update.
+	result, err := c.Attach("scroll-update")
+	require.NoError(t, err)
+	assert.NotNil(t, result.Snapshot.Viewport)
+}
+
+func TestE2E_NoneBackend_UpdateEmulatorScrollback_Fails(t *testing.T) {
+	env := startTestDaemon(t)
+	c := connectTestClient(t, env)
+
+	_, err := c.Create("none-scroll", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", "sleep 10"},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	// Should fail — NoneEmulator doesn't implement ScrollbackConfigurable.
+	err = c.UpdateEmulatorScrollback("none-scroll", 50000)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "scrollback")
+}
+
 func TestE2E_NoneBackend_EmptySnapshot(t *testing.T) {
 	env := startTestDaemon(t)
 	c := connectTestClient(t, env)

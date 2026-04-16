@@ -230,3 +230,14 @@ func (a *screenEmulatorAdapter) Snapshot() session.Snapshot {
 func (a *screenEmulatorAdapter) Resize(cols, rows int) {
 	a.em.Resize(cols, rows)
 }
+
+// SetScrollbackSize implements session.ScrollbackConfigurable by delegating to
+// the underlying emulator if it supports scrollback configuration.
+func (a *screenEmulatorAdapter) SetScrollbackSize(lines int) {
+	type scrollbackSetter interface {
+		SetScrollbackSize(lines int)
+	}
+	if s, ok := a.em.(scrollbackSetter); ok {
+		s.SetScrollbackSize(lines)
+	}
+}

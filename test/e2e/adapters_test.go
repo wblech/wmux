@@ -157,6 +157,10 @@ func (a *sessionAdapter) MetaGetAll(id string) (map[string]string, error) {
 	return a.svc.MetaGetAll(id) //nolint:wrapcheck
 }
 
+func (a *sessionAdapter) UpdateEmulatorScrollback(id string, scrollbackLines int) error {
+	return a.svc.UpdateEmulatorScrollback(id, scrollbackLines) //nolint:wrapcheck
+}
+
 func (a *sessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
