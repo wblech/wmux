@@ -6,6 +6,8 @@ type ScreenEmulator interface {
 	// Process handles incoming terminal data bytes.
 	Process(data []byte)
 	// Snapshot returns the current terminal screen state.
+	// Viewport uses \r\n line endings and has no trailing empty rows.
+	// Scrollback uses \r\n line endings.
 	Snapshot() Snapshot
 	// Resize updates the terminal dimensions.
 	Resize(cols, rows int)
