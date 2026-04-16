@@ -128,6 +128,9 @@ func buildDaemonArgs(cfg *config) []string {
 	if cfg.emulatorBackend != "none" {
 		args = append(args, "--emulator-backend", cfg.emulatorBackend)
 	}
+	if cfg.xtermBinPath != "" {
+		args = append(args, "--xterm-bin", cfg.xtermBinPath)
+	}
 
 	return args
 }

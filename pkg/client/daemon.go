@@ -68,7 +68,14 @@ func (d *Daemon) Serve(ctx context.Context) error {
 
 	server := transport.NewServer(listener, token)
 	spawner := &pty.UnixSpawner{}
-	sessionSvc := session.NewService(spawner)
+
+	var sessionOpts []session.Option
+	if d.cfg.emulatorBackend == "xterm" && d.cfg.xtermBinPath != "" {
+		starter := session.NewCommandProcessStarter("node", d.cfg.xtermBinPath)
+		mgr := session.NewAddonManager(starter)
+		sessionOpts = append(sessionOpts, session.WithAddonManager(mgr))
+	}
+	sessionSvc := session.NewService(spawner, sessionOpts...)
 
 	pidFile := filepath.Join(filepath.Dir(d.cfg.socket), "wmux.pid")
 
@@ -179,6 +186,11 @@ func parseDaemonArgs(args []string) []Option {
 		case "--emulator-backend":
 			if i+1 < len(args) {
 				opts = append(opts, WithEmulatorBackend(args[i+1]))
+				i++
+			}
+		case "--xterm-bin":
+			if i+1 < len(args) {
+				opts = append(opts, WithXtermBinPath(args[i+1]))
 				i++
 			}
 		}

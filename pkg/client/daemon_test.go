@@ -148,6 +148,7 @@ func TestBuildDaemonArgs(t *testing.T) {
 		coldRestore:       true,
 		maxScrollbackSize: 1048576,
 		emulatorBackend:   "xterm",
+		xtermBinPath:      "/usr/local/bin/wmux-emulator-xterm",
 		autoStart:         true,
 	}
 
@@ -166,6 +167,8 @@ func TestBuildDaemonArgs(t *testing.T) {
 	assert.Contains(t, args, "1048576")
 	assert.Contains(t, args, "--emulator-backend")
 	assert.Contains(t, args, "xterm")
+	assert.Contains(t, args, "--xterm-bin")
+	assert.Contains(t, args, "/usr/local/bin/wmux-emulator-xterm")
 }
 
 func TestNewDaemon_SessionOperations(t *testing.T) {
@@ -261,6 +264,7 @@ func TestBuildDaemonArgs_Defaults(t *testing.T) {
 		coldRestore:       false,
 		maxScrollbackSize: 0,
 		emulatorBackend:   "none",
+		xtermBinPath:      "",
 		autoStart:         true,
 	}
 

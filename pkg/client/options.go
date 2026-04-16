@@ -13,6 +13,7 @@ type config struct {
 	coldRestore       bool
 	maxScrollbackSize int64
 	emulatorBackend   string
+	xtermBinPath      string
 	autoStart         bool
 }
 
@@ -27,6 +28,7 @@ func newConfig(opts ...Option) *config {
 		coldRestore:       false,
 		maxScrollbackSize: 0,
 		emulatorBackend:   "none",
+		xtermBinPath:      "",
 		autoStart:         true,
 	}
 	for _, o := range opts {
@@ -78,4 +80,9 @@ func WithMaxScrollbackSize(n int64) Option {
 // WithEmulatorBackend sets the terminal emulator backend to use.
 func WithEmulatorBackend(backend string) Option {
 	return func(c *config) { c.emulatorBackend = backend }
+}
+
+// WithXtermBinPath sets the path to the xterm addon binary.
+func WithXtermBinPath(path string) Option {
+	return func(c *config) { c.xtermBinPath = path }
 }
