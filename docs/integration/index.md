@@ -140,6 +140,19 @@ d, err := client.NewDaemon(
 )
 ```
 
+### Runtime scrollback configuration
+
+The scrollback buffer size can be changed on a live session without restarting
+the daemon:
+
+```go
+err := c.UpdateEmulatorScrollback("sess-1", 50000)
+```
+
+This works with addons that support it (charmvt does). If the addon does not
+support runtime configuration, the call returns an error. Increasing the size
+preserves existing data. Decreasing discards the oldest lines.
+
 ### Writing your own addon
 
 Implement the `client.EmulatorFactory` interface:

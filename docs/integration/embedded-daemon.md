@@ -137,6 +137,12 @@ The snapshot is populated when an emulator addon is configured (e.g.,
 
 Install: `go get github.com/wblech/wmux/addons/charmvt`
 
+The scrollback size can be changed at runtime on a live session:
+
+```go
+err := c.UpdateEmulatorScrollback("main", 50000)
+```
+
 **xterm addon (legacy)** — Requires Node.js on the target:
 
 For maximum xterm.js fidelity, use the xterm addon with the CLI's `--xterm-bin`
