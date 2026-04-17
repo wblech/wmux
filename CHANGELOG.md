@@ -2,6 +2,13 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.11](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.11) - 2026-04-17
+
+### Bug Fixes
+
+- Drain vt response pipe to prevent Write() deadlock *(charmvt)*
+- Resolve lint issues in emulator close tests *(session)*
+
 ## [0.1.0-beta.10](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.10) - 2026-04-17
 
 ### Bug Fixes
