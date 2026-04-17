@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 date: 2026-04-13
 decision-makers: wblech
+superseded-by: 0026
 ---
 
 # Two-Phase Warm Attach Snapshot
@@ -31,3 +32,7 @@ Chosen option: "Two-phase snapshot", because Watchtower's xterm.js can load scro
 * Good, because client can render scrollback and viewport independently
 * Good, because snapshot is only computed on demand (attach)
 * Bad, because snapshot of a busy terminal can be large (hundreds of KB) — acceptable for one-time attach
+
+## Superseded by 0026
+
+xterm.js has no public API to load scrollback separately; the two-phase split produced a fragile ordering contract. See 0026.
