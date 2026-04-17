@@ -9,37 +9,8 @@ import (
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/config"
 	"github.com/wblech/wmux/internal/platform/history"
-	"github.com/wblech/wmux/internal/session"
 	"github.com/wblech/wmux/pkg/client"
 )
-
-// cliEmulatorFactory wraps AddonManager to implement client.EmulatorFactory.
-type cliEmulatorFactory struct {
-	mgr *session.AddonManager
-}
-
-func (f *cliEmulatorFactory) Create(sessionID string, cols, rows int) client.ScreenEmulator {
-	return &cliEmulatorAdapter{em: f.mgr.EmulatorFor(sessionID, cols, rows)}
-}
-
-func (f *cliEmulatorFactory) Close() {
-	f.mgr.Shutdown()
-}
-
-// cliEmulatorAdapter wraps session.ScreenEmulator to implement client.ScreenEmulator.
-type cliEmulatorAdapter struct {
-	em session.ScreenEmulator
-}
-
-func (a *cliEmulatorAdapter) Process(data []byte) { a.em.Process(data) }
-func (a *cliEmulatorAdapter) Snapshot() client.Snapshot {
-	snap := a.em.Snapshot()
-	return client.Snapshot{
-		Scrollback: snap.Scrollback,
-		Viewport:   snap.Viewport,
-	}
-}
-func (a *cliEmulatorAdapter) Resize(cols, rows int) { a.em.Resize(cols, rows) }
 
 func cmdDaemon(args []string) int {
 	// Defaults derived from the global socketPath.
@@ -49,8 +20,6 @@ func cmdDaemon(args []string) int {
 	var opts []client.Option
 	opts = append(opts, client.WithSocket(expandedSocket))
 	opts = append(opts, client.WithDataDir(filepath.Join(baseDir, "sessions")))
-
-	var xtermBinPath string
 
 	// Parse daemon-specific flags.
 	for i := 0; i < len(args); i++ {
@@ -70,11 +39,6 @@ func cmdDaemon(args []string) int {
 			}
 		case "--log-level":
 			if i+1 < len(args) {
-				i++
-			}
-		case "--xterm-bin":
-			if i+1 < len(args) {
-				xtermBinPath = args[i+1]
 				i++
 			}
 		}
@@ -102,12 +66,6 @@ func cmdDaemon(args []string) int {
 		client.WithColdRestore(cfg.History.ColdRestore),
 		client.WithMaxScrollbackSize(maxScrollback),
 	)
-
-	if xtermBinPath != "" {
-		starter := session.NewCommandProcessStarter("node", xtermBinPath)
-		mgr := session.NewAddonManager(starter)
-		opts = append(opts, client.WithEmulatorFactory(&cliEmulatorFactory{mgr: mgr}))
-	}
 
 	d, err := client.NewDaemon(opts...)
 	if err != nil {
