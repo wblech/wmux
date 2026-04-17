@@ -185,7 +185,7 @@ func TestService_Snapshot(t *testing.T) {
 		t.Skip("PTY not supported on Windows")
 	}
 
-	// Without AddonManager, the "none" backend is used.
+	// Without an emulator factory, the "none" backend is used.
 	svc := NewService(&pty.UnixSpawner{})
 
 	_, err := svc.Create("snap-me", defaultCreateOpts())
@@ -295,33 +295,6 @@ func TestService_WriteInputNotFound(t *testing.T) {
 
 	err := svc.WriteInput("no-such-session", []byte("hello"))
 	assert.ErrorIs(t, err, ErrSessionNotFound)
-}
-
-// TestService_SnapshotWithAddonManager_UsesAddonEmulator is a regression guard
-// ensuring that WithAddonManager causes Create to use AddonEmulator, not NoneEmulator.
-func TestService_SnapshotWithAddonManager_UsesAddonEmulator(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("PTY not supported on Windows")
-	}
-
-	starter := &mockProcessStarter{processes: nil}
-	mgr := NewAddonManager(starter)
-	svc := NewService(&pty.UnixSpawner{}, WithAddonManager(mgr))
-
-	_, err := svc.Create("addon-sess", defaultCreateOpts())
-	require.NoError(t, err)
-
-	// Verify the addon process was started (proves AddonEmulator is used, not NoneEmulator).
-	require.Len(t, starter.processes, 1,
-		"REGRESSION: WithAddonManager must cause addon process to start on Create")
-
-	// Verify the emulator received Process() calls from readLoop.
-	// The shell produces at least a prompt, which goes to Process() -> addon stdin.
-	require.Eventually(t, func() bool {
-		proc := starter.processes[0]
-		return proc.stdinLen() > 0
-	}, 3*time.Second, 50*time.Millisecond,
-		"REGRESSION: readLoop must feed PTY output to the addon emulator")
 }
 
 func TestService_SnapshotNotFound(t *testing.T) {

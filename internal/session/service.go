@@ -99,7 +99,6 @@ type Service struct {
 	maxSessions     int
 	onExit          func(id string, exitCode int)
 	spawnSem        chan struct{}
-	addonManager    *AddonManager
 	emulatorFactory EmulatorFactory
 }
 
@@ -113,7 +112,6 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 		maxSessions:     0,
 		onExit:          nil,
 		spawnSem:        nil,
-		addonManager:    nil,
 		emulatorFactory: nil,
 	}
 
@@ -208,12 +206,9 @@ func (s *Service) Create(id string, opts CreateOptions) (Session, error) {
 	}
 
 	var emulator ScreenEmulator
-	switch {
-	case s.emulatorFactory != nil:
+	if s.emulatorFactory != nil {
 		emulator = s.emulatorFactory.Create(id, cols, rows)
-	case s.addonManager != nil:
-		emulator = s.addonManager.EmulatorFor(id, cols, rows)
-	default:
+	} else {
 		emulator = NoneEmulator{}
 	}
 
