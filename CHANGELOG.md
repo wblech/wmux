@@ -2,6 +2,12 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.1.0-beta.10](https://github.com/wblech/wmux/releases/tag/v0.1.0-beta.10) - 2026-04-17
+
+### Bug Fixes
+
+- Run emulator.Process async to prevent readLoop deadlock *(session)*
+
 ## [addons/charmvt/v0.1.0-beta.3](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.1.0-beta.3) - 2026-04-16
 
 ### Bug Fixes
