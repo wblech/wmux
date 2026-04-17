@@ -2,6 +2,12 @@
 
 All notable changes to the charmvt addon are documented in this file.
 
+## [0.1.0-beta.5](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.1.0-beta.5) - 2026-04-17
+
+### Bug Fixes
+
+- Append CUP sequence to snapshot viewport for cursor restore *(charmvt)*
+
 ## [0.1.0-beta.4](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.1.0-beta.4) - 2026-04-17
 
 ### Bug Fixes
