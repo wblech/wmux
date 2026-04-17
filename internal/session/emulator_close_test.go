@@ -2,11 +2,11 @@ package session
 
 import (
 	"io"
-	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Tests for emulator io.Closer cleanup in waitLoop (ADR 0025).
@@ -17,16 +17,17 @@ import (
 
 // closableEmulator is a test double that tracks Close() calls.
 type closableEmulator struct {
-	mu         sync.Mutex
 	closed     atomic.Bool
 	closeCalls atomic.Int64
 	snapshot   Snapshot
 }
 
 func (e *closableEmulator) Process(_ []byte) {}
+
 func (e *closableEmulator) Snapshot() Snapshot {
 	return e.snapshot
 }
+
 func (e *closableEmulator) Resize(_, _ int) {}
 
 func (e *closableEmulator) Close() error {
@@ -38,16 +39,30 @@ func (e *closableEmulator) Close() error {
 // nonClosableEmulator is a test double without Close() method.
 type nonClosableEmulator struct{}
 
-func (e *nonClosableEmulator) Process(_ []byte)  {}
-func (e *nonClosableEmulator) Snapshot() Snapshot { return Snapshot{} }
-func (e *nonClosableEmulator) Resize(_, _ int)    {}
+func (e *nonClosableEmulator) Process(_ []byte) {}
+
+func (e *nonClosableEmulator) Snapshot() Snapshot {
+	return Snapshot{
+		Scrollback: nil,
+		Viewport:   nil,
+	}
+}
+
+func (e *nonClosableEmulator) Resize(_, _ int) {}
 
 // TestEmulatorCloseTypeAssertion verifies the io.Closer type assertion
 // pattern used in waitLoop works correctly for both closer and non-closer
 // emulators.
 func TestEmulatorCloseTypeAssertion(t *testing.T) {
 	t.Run("closable emulator", func(t *testing.T) {
-		em := &closableEmulator{}
+		em := &closableEmulator{
+			closed:     atomic.Bool{},
+			closeCalls: atomic.Int64{},
+			snapshot: Snapshot{
+				Scrollback: nil,
+				Viewport:   nil,
+			},
+		}
 
 		// Simulate what waitLoop does — type assertion through the interface.
 		var screenEm ScreenEmulator = em
@@ -71,11 +86,18 @@ func TestEmulatorCloseTypeAssertion(t *testing.T) {
 	t.Run("interface variable", func(t *testing.T) {
 		// Verify the type assertion works through the ScreenEmulator interface
 		// (the actual type stored in managedSession.emulator).
-		var em ScreenEmulator = &closableEmulator{}
+		var em ScreenEmulator = &closableEmulator{
+			closed:     atomic.Bool{},
+			closeCalls: atomic.Int64{},
+			snapshot: Snapshot{
+				Scrollback: nil,
+				Viewport:   nil,
+			},
+		}
 
 		closer, ok := em.(io.Closer)
-		assert.True(t, ok)
-		assert.NoError(t, closer.Close())
+		require.True(t, ok)
+		require.NoError(t, closer.Close())
 		assert.True(t, em.(*closableEmulator).closed.Load())
 	})
 }
@@ -84,7 +106,14 @@ func TestEmulatorCloseTypeAssertion(t *testing.T) {
 // the waitLoop calls Close() on the emulator if it implements io.Closer.
 // This is a behavioral test of the cleanup code path.
 func TestWaitLoopClosesEmulator(t *testing.T) {
-	em := &closableEmulator{}
+	em := &closableEmulator{
+		closed:     atomic.Bool{},
+		closeCalls: atomic.Int64{},
+		snapshot: Snapshot{
+			Scrollback: nil,
+			Viewport:   nil,
+		},
+	}
 
 	// Simulate the cleanup code path from waitLoop:
 	//   if closer, ok := ms.emulator.(io.Closer); ok {
