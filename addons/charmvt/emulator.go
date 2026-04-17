@@ -9,6 +9,11 @@ import (
 )
 
 // emulator wraps charmbracelet/x/vt as a client.ScreenEmulator.
+//
+// The vt.Emulator uses an internal io.Pipe for terminal responses (DA1, DA2,
+// DSR, CPR). Without a reader, Write() deadlocks because io.Pipe is
+// synchronous. A background goroutine drains the pipe to prevent this.
+// See: decisions/0025-drain-emulator-response-pipe.md
 type emulator struct {
 	mu   sync.Mutex
 	term *vt.Emulator
@@ -45,7 +50,26 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 		term.SetCallbacks(cb)
 	}
 
+	// Drain the emulator's response pipe to prevent Write() from blocking.
+	// The vt emulator writes DA1/DA2/DSR/CPR responses to an internal
+	// io.Pipe. Without a reader, Write() deadlocks. These responses are
+	// safely discarded — the real terminal (xterm.js) handles them.
+	// The goroutine exits when term.Close() is called (pipe returns EOF).
+	go drainResponsePipe(term)
+
 	return &emulator{mu: sync.Mutex{}, term: term, cols: cols}
+}
+
+// drainResponsePipe reads and discards all data from the emulator's response
+// pipe. This prevents vt.Write() from blocking when the emulator generates
+// terminal responses (DA1, DA2, DSR, CPR). Exits when the pipe is closed.
+func drainResponsePipe(term *vt.Emulator) {
+	buf := make([]byte, 256)
+	for {
+		if _, err := term.Read(buf); err != nil {
+			return
+		}
+	}
 }
 
 // Process writes terminal data to the emulator.
@@ -81,6 +105,12 @@ func (e *emulator) SetScrollbackSize(lines int) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.term.SetScrollbackSize(lines)
+}
+
+// Close shuts down the emulator and stops the drain goroutine.
+// Implements io.Closer so the session layer can clean up via type assertion.
+func (e *emulator) Close() error {
+	return e.term.Close()
 }
 
 // Resize updates the terminal dimensions.

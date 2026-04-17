@@ -571,6 +571,10 @@ func (s *Service) waitLoop(ms *managedSession) {
 		}
 	}
 
+	if closer, ok := ms.emulator.(io.Closer); ok {
+		_ = closer.Close()
+	}
+
 	if onExit != nil {
 		onExit(ms.session.ID, exitCode)
 	}
