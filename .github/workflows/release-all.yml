@@ -1,0 +1,189 @@
+name: "Release: changed modules"
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - beta
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Detect changed modules
+        id: detect
+        run: |
+          # Core: changes outside addons/ since last core tag
+          CORE_TAG=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$CORE_TAG" ]; then
+            echo "release-core=true" >> "$GITHUB_OUTPUT"
+            echo "Core: first release (no tags yet)"
+          else
+            CORE_CHANGES=$(git diff --name-only "$CORE_TAG"..HEAD -- . ':!addons/' | wc -l | tr -d ' ')
+            echo "release-core=$( [ "$CORE_CHANGES" -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+            echo "Core: $CORE_CHANGES files changed since $CORE_TAG"
+          fi
+
+          # Charmvt: changes in addons/charmvt/ since last addon tag
+          CHARMVT_TAG=$(git tag -l 'addons/charmvt/v[0-9]*' --sort=-v:refname | head -n1)
+          if [ -z "$CHARMVT_TAG" ]; then
+            echo "release-charmvt=true" >> "$GITHUB_OUTPUT"
+            echo "Charmvt: first release (no tags yet)"
+          else
+            CHARMVT_CHANGES=$(git diff --name-only "$CHARMVT_TAG"..HEAD -- addons/charmvt/ | wc -l | tr -d ' ')
+            echo "release-charmvt=$( [ "$CHARMVT_CHANGES" -gt 0 ] && echo true || echo false )" >> "$GITHUB_OUTPUT"
+            echo "Charmvt: $CHARMVT_CHANGES files changed since $CHARMVT_TAG"
+          fi
+
+      - name: Check at least one module needs release
+        if: steps.detect.outputs.release-core != 'true' && steps.detect.outputs.release-charmvt != 'true'
+        run: |
+          echo "No modules have changes since their last release."
+          exit 1
+
+      # --- Core release ---
+
+      - name: "Core: calculate version"
+        id: core-version
+        if: steps.detect.outputs.release-core == 'true'
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          LATEST=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
+          NEXT=$(. .github/scripts/bump-version.sh "$LATEST" "" "$BUMP")
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Core release: $NEXT"
+
+      - name: "Core: generate changelog"
+        if: steps.detect.outputs.release-core == 'true'
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag "${{ steps.core-version.outputs.tag }}"
+        env:
+          OUTPUT: CHANGELOG.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Core: extract release notes"
+        if: steps.detect.outputs.release-core == 'true'
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag "${{ steps.core-version.outputs.tag }}" --unreleased --strip header
+        env:
+          OUTPUT: /tmp/core-release-notes.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Core: commit changelog"
+        if: steps.detect.outputs.release-core == 'true'
+        run: |
+          git add CHANGELOG.md
+          git commit -m "chore(release): ${{ steps.core-version.outputs.tag }}"
+
+      - name: "Core: create tag"
+        if: steps.detect.outputs.release-core == 'true'
+        run: |
+          git tag "${{ steps.core-version.outputs.tag }}"
+
+      # --- Charmvt release ---
+
+      - name: "Charmvt: calculate version"
+        id: charmvt-version
+        if: steps.detect.outputs.release-charmvt == 'true'
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          LATEST=$(git tag -l 'addons/charmvt/v[0-9]*' --sort=-v:refname | head -n1)
+          NEXT=$(. .github/scripts/bump-version.sh "$LATEST" "addons/charmvt/" "$BUMP")
+          TAG="addons/charmvt/${NEXT}"
+          echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Charmvt release: $TAG"
+
+      - name: "Charmvt: generate changelog"
+        if: steps.detect.outputs.release-charmvt == 'true'
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff-charmvt.toml
+          args: --tag "${{ steps.charmvt-version.outputs.tag }}"
+        env:
+          OUTPUT: addons/charmvt/CHANGELOG.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Charmvt: extract release notes"
+        if: steps.detect.outputs.release-charmvt == 'true'
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff-charmvt.toml
+          args: --tag "${{ steps.charmvt-version.outputs.tag }}" --unreleased --strip header
+        env:
+          OUTPUT: /tmp/charmvt-release-notes.md
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Charmvt: commit changelog"
+        if: steps.detect.outputs.release-charmvt == 'true'
+        run: |
+          git add addons/charmvt/CHANGELOG.md
+          git commit -m "chore(release): ${{ steps.charmvt-version.outputs.tag }}"
+
+      - name: "Charmvt: create tag"
+        if: steps.detect.outputs.release-charmvt == 'true'
+        run: |
+          git tag "${{ steps.charmvt-version.outputs.tag }}"
+
+      # --- Push all at once ---
+
+      - name: Push
+        run: |
+          git push origin main --follow-tags
+
+      # --- Create GitHub Releases ---
+
+      - name: "Core: create GitHub Release"
+        if: steps.detect.outputs.release-core == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.core-version.outputs.tag }}
+          name: "wmux ${{ steps.core-version.outputs.version }}"
+          body_path: /tmp/core-release-notes.md
+          prerelease: ${{ contains(steps.core-version.outputs.version, 'beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "Charmvt: create GitHub Release"
+        if: steps.detect.outputs.release-charmvt == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.charmvt-version.outputs.tag }}
+          name: "charmvt ${{ steps.charmvt-version.outputs.version }}"
+          body_path: /tmp/charmvt-release-notes.md
+          prerelease: ${{ contains(steps.charmvt-version.outputs.version, 'beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

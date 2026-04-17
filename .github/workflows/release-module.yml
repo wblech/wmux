@@ -59,65 +59,7 @@ jobs:
           TAG_GLOB: ${{ inputs.tag-glob }}
         run: |
           LATEST=$(git tag -l "$TAG_GLOB" --sort=-v:refname | head -n1)
-
-          if [ -z "$LATEST" ]; then
-            # No tags yet — first release
-            if [ "$BUMP" = "beta" ]; then
-              NEXT="v0.1.0-beta.1"
-            else
-              NEXT="v0.1.0"
-            fi
-          else
-            # Strip tag prefix to get version with v
-            V="${LATEST#"$TAG_PREFIX"}"
-            # Strip leading v
-            V="${V#v}"
-
-            # Check if current version is a beta
-            if echo "$V" | grep -q "beta"; then
-              BASE=$(echo "$V" | sed 's/-beta\..*//')
-              BETA_NUM=$(echo "$V" | sed 's/.*-beta\.//')
-
-              case "$BUMP" in
-                beta)
-                  NEXT="v${BASE}-beta.$((BETA_NUM + 1))"
-                  ;;
-                patch)
-                  NEXT="v${BASE}"
-                  ;;
-                minor)
-                  MAJOR=$(echo "$BASE" | cut -d. -f1)
-                  MINOR=$(echo "$BASE" | cut -d. -f2)
-                  NEXT="v${MAJOR}.$((MINOR + 1)).0"
-                  ;;
-                major)
-                  MAJOR=$(echo "$BASE" | cut -d. -f1)
-                  NEXT="v$((MAJOR + 1)).0.0"
-                  ;;
-              esac
-            else
-              # Stable version
-              MAJOR=$(echo "$V" | cut -d. -f1)
-              MINOR=$(echo "$V" | cut -d. -f2)
-              PATCH=$(echo "$V" | cut -d. -f3)
-
-              case "$BUMP" in
-                beta)
-                  NEXT="v${MAJOR}.$((MINOR + 1)).0-beta.1"
-                  ;;
-                patch)
-                  NEXT="v${MAJOR}.${MINOR}.$((PATCH + 1))"
-                  ;;
-                minor)
-                  NEXT="v${MAJOR}.$((MINOR + 1)).0"
-                  ;;
-                major)
-                  NEXT="v$((MAJOR + 1)).0.0"
-                  ;;
-              esac
-            fi
-          fi
-
+          NEXT=$(. .github/scripts/bump-version.sh "$LATEST" "$TAG_PREFIX" "$BUMP")
           TAG="${TAG_PREFIX}${NEXT}"
           echo "version=$NEXT" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
