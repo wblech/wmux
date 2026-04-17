@@ -1,6 +1,7 @@
 package charmvt
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 
@@ -89,6 +90,13 @@ func (e *emulator) Snapshot() client.Snapshot {
 	viewport := e.term.Render()
 	viewport = trimTrailingEmptyRows(viewport)
 	viewport = toTerminalLineEndings(viewport)
+
+	// Append a CUP (Cursor Position) escape to restore the cursor where
+	// the emulator has it. Without this, xterm.js leaves the cursor at
+	// the end of the last written text after a warm reconnect snapshot,
+	// causing visual desync between cursor and prompt.
+	pos := e.term.CursorPosition()
+	viewport += fmt.Sprintf("\x1b[%d;%dH", pos.Y+1, pos.X+1)
 
 	scrollback := renderScrollback(e.term, e.cols)
 
