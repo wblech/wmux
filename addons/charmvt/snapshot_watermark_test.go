@@ -800,3 +800,69 @@ func TestWatermark_EC24_SinceLastClear_AltScreenIgnored(t *testing.T) {
 	assert.Contains(t, replay, "MAIN-010",
 		"main-screen scrollback mid-range must survive")
 }
+
+// ---------------------------------------------------------------------------
+// EC5_SinceLastClear_ShellTUIShell: SinceLastClear variant with ED2 redraws.
+//
+// Pre-TUI shell scrollback excluded (last ED2 baseline).
+// Post-TUI shell scrollback preserved (after baseline).
+// ---------------------------------------------------------------------------
+func TestWatermark_EC5_SinceLastClear_ShellTUIShell(t *testing.T) {
+	em := newSinceLastClearEmulator("ec5-slc", 80, 5, 1000)
+
+	fillLines(em, "BEFORE", 15)
+
+	em.Process([]byte("\x1b[2J\x1b[H"))
+	em.Process([]byte("TUI-CONTENT-A\r\n"))
+	em.Process([]byte("TUI-CONTENT-B\r\n"))
+
+	em.Process([]byte("\x1b[2J\x1b[H"))
+	em.Process([]byte("TUI-CONTENT-A\r\n"))
+	em.Process([]byte("TUI-CONTENT-B\r\n"))
+
+	fillLines(em, "AFTER", 15)
+
+	snap := em.Snapshot()
+	replay := string(snap.Replay)
+
+	// Pre-TUI shell scrollback excluded (last ED2 baseline).
+	assert.NotContains(t, replay, "BEFORE-000",
+		"pre-TUI shell scrollback excluded in SinceLastClear")
+
+	// Post-TUI shell scrollback preserved (after baseline).
+	assert.Contains(t, replay, "AFTER-000",
+		"post-TUI shell scrollback must survive")
+	assert.Contains(t, replay, "AFTER-010",
+		"post-TUI shell mid-range must survive")
+}
+
+// ---------------------------------------------------------------------------
+// EC16_SinceLastClear_ScrollOffBetweenED2s: SinceLastClear with scroll-off.
+//
+// Natural scroll-off between ED2 redraws is preserved.
+// Lines scrolled off before last ED2 are excluded.
+// ---------------------------------------------------------------------------
+func TestWatermark_EC16_SinceLastClear_ScrollOffBetweenED2s(t *testing.T) {
+	em := newSinceLastClearEmulator("ec16-slc", 80, 5, 1000)
+
+	em.Process([]byte("\x1b[2J\x1b[H"))
+	em.Process([]byte("TUI-V1\r\n"))
+
+	// TUI outputs long result causing natural scroll-off.
+	fillLines(em, "LOG", 20)
+
+	// TUI redraws (new ED2). Baseline moves to current scrollbackLen.
+	em.Process([]byte("\x1b[2J\x1b[H"))
+	em.Process([]byte("TUI-V2\r\n"))
+
+	snap := em.Snapshot()
+	replay := string(snap.Replay)
+
+	// LOG lines are before the last ED2 baseline — excluded.
+	assert.NotContains(t, replay, "LOG-000",
+		"scroll-off before last ED2 excluded in SinceLastClear")
+
+	// Current TUI viewport present.
+	assert.Contains(t, replay, "TUI-V2",
+		"current TUI state must be in viewport")
+}
