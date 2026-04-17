@@ -42,3 +42,10 @@ post-processing.
 * Bad, because separating scrollback from viewport at the API layer is
   possible only by re-parsing the stream. No current consumer needs this,
   and the wmux emulator still tracks them separately internally.
+
+## Addendum (2026-04-17)
+
+The Replay stream content depends on the charmvt scrollback mode. See
+ADR 0028 for details on `SnapshotScrollbackSinceLastClear`, which excludes
+pre-ED2 scrollback from the Replay to prevent stale shell content from
+appearing above TUI banners on reconnect.
