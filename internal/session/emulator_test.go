@@ -19,8 +19,7 @@ func TestNoneEmulator_Snapshot(t *testing.T) {
 	e := NoneEmulator{}
 	snap := e.Snapshot()
 
-	assert.Nil(t, snap.Scrollback)
-	assert.Nil(t, snap.Viewport)
+	assert.Nil(t, snap.Replay)
 }
 
 func TestNoneEmulator_Resize(t *testing.T) {

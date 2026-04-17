@@ -8,12 +8,9 @@ type NoneEmulator struct{}
 // Process discards the provided data without processing it.
 func (NoneEmulator) Process(_ []byte) {}
 
-// Snapshot returns an empty Snapshot with nil scrollback and viewport.
+// Snapshot returns an empty Snapshot with nil replay.
 func (NoneEmulator) Snapshot() Snapshot {
-	return Snapshot{
-		Scrollback: nil,
-		Viewport:   nil,
-	}
+	return Snapshot{Replay: nil}
 }
 
 // Resize accepts new terminal dimensions but performs no action.

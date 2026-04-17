@@ -332,10 +332,10 @@ func TestE2E_CharmVT_AttachReturnsSnapshot(t *testing.T) {
 	var result client.AttachResult
 	require.Eventually(t, func() bool {
 		result, err = c.Attach("charmvt-snap")
-		if err != nil || result.Snapshot.Viewport == nil {
+		if err != nil || result.Snapshot.Replay == nil {
 			return false
 		}
-		return strings.Contains(string(result.Snapshot.Viewport), "hello-charmvt")
+		return strings.Contains(string(result.Snapshot.Replay), "hello-charmvt")
 	}, 5*time.Second, 200*time.Millisecond,
 		"E2E: charmvt Attach must return viewport containing the echoed text")
 
@@ -359,10 +359,10 @@ func TestE2E_CharmVT_DetachReattachPreservesSnapshot(t *testing.T) {
 	var result1 client.AttachResult
 	require.Eventually(t, func() bool {
 		result1, err = c.Attach("charmvt-reattach")
-		if err != nil || result1.Snapshot.Viewport == nil {
+		if err != nil || result1.Snapshot.Replay == nil {
 			return false
 		}
-		return strings.Contains(string(result1.Snapshot.Viewport), "reattach-charmvt")
+		return strings.Contains(string(result1.Snapshot.Replay), "reattach-charmvt")
 	}, 5*time.Second, 200*time.Millisecond,
 		"E2E: initial Attach must return viewport containing the echoed text")
 
@@ -371,9 +371,9 @@ func TestE2E_CharmVT_DetachReattachPreservesSnapshot(t *testing.T) {
 	result2, err := c.Attach("charmvt-reattach")
 	require.NoError(t, err)
 
-	assert.NotNil(t, result2.Snapshot.Viewport,
+	assert.NotNil(t, result2.Snapshot.Replay,
 		"E2E: Reattach must return snapshot — terminal state is not lost on detach")
-	assert.Contains(t, string(result2.Snapshot.Viewport), "reattach-charmvt")
+	assert.Contains(t, string(result2.Snapshot.Replay), "reattach-charmvt")
 }
 
 func TestE2E_CharmVT_UpdateEmulatorScrollback(t *testing.T) {
@@ -393,7 +393,7 @@ func TestE2E_CharmVT_UpdateEmulatorScrollback(t *testing.T) {
 	// Wait for output to be processed.
 	require.Eventually(t, func() bool {
 		result, attachErr := c.Attach("scroll-update")
-		return attachErr == nil && result.Snapshot.Viewport != nil
+		return attachErr == nil && result.Snapshot.Replay != nil
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Update scrollback size — should succeed with charmvt.
@@ -403,7 +403,7 @@ func TestE2E_CharmVT_UpdateEmulatorScrollback(t *testing.T) {
 	// Verify session still works after update.
 	result, err := c.Attach("scroll-update")
 	require.NoError(t, err)
-	assert.NotNil(t, result.Snapshot.Viewport)
+	assert.NotNil(t, result.Snapshot.Replay)
 }
 
 func TestE2E_NoneBackend_UpdateEmulatorScrollback_Fails(t *testing.T) {
@@ -445,6 +445,5 @@ func TestE2E_NoneBackend_EmptySnapshot(t *testing.T) {
 	result, err := c.Attach("none-snap")
 	require.NoError(t, err)
 
-	assert.Nil(t, result.Snapshot.Scrollback)
-	assert.Nil(t, result.Snapshot.Viewport)
+	assert.Nil(t, result.Snapshot.Replay)
 }

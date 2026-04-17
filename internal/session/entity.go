@@ -43,12 +43,12 @@ func (s State) IsTerminal() bool {
 	return s == StateExited || s == StateRemoved
 }
 
-// Snapshot holds a point-in-time capture of a terminal screen.
+// Snapshot holds a point-in-time capture of a terminal screen as a
+// self-contained replay byte stream. See pkg/client.Snapshot godoc for
+// the replay contract.
 type Snapshot struct {
-	// Scrollback contains the lines that have scrolled off the visible viewport.
-	Scrollback []byte
-	// Viewport contains the currently visible terminal content.
-	Viewport []byte
+	// Replay is the self-contained replay byte stream.
+	Replay []byte
 }
 
 // ScreenEmulator processes terminal output and provides screen snapshots.

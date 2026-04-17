@@ -156,7 +156,7 @@ func (a *testSessionAdapter) Snapshot(id string) (SnapshotData, error) {
 	if err != nil {
 		return SnapshotData{}, err //nolint:wrapcheck
 	}
-	return SnapshotData{Scrollback: snap.Scrollback, Viewport: snap.Viewport}, nil
+	return SnapshotData{Replay: snap.Replay}, nil
 }
 
 func (a *testSessionAdapter) LastActivity(id string) (time.Time, error) {
@@ -1306,8 +1306,7 @@ func TestDaemon_AttachSnapshotWithData(t *testing.T) {
 	sm := &snapshotSpySessionManager{
 		noopSessionManager: noopSessionManager{},
 		snapshotData: SnapshotData{
-			Scrollback: []byte("line1\r\nline2\r\n"),
-			Viewport:   []byte("current-view"),
+			Replay: []byte("\x1b[2J\x1b[Hline1\r\nline2\r\ncurrent-view"),
 		},
 	}
 
@@ -1338,8 +1337,7 @@ func TestDaemon_AttachSnapshotWithData(t *testing.T) {
 	var attachData AttachResponse
 	require.NoError(t, json.Unmarshal(resp.Payload, &attachData))
 	require.NotNil(t, attachData.Snapshot, "Snapshot should be non-nil when SessionManager returns data")
-	assert.Equal(t, []byte("line1\r\nline2\r\n"), attachData.Snapshot.Scrollback)
-	assert.Equal(t, []byte("current-view"), attachData.Snapshot.Viewport)
+	assert.Equal(t, []byte("\x1b[2J\x1b[Hline1\r\nline2\r\ncurrent-view"), attachData.Snapshot.Replay)
 }
 
 // TestDaemon_AttachSnapshotPopulated_Regression is a regression guard ensuring
@@ -1349,8 +1347,7 @@ func TestDaemon_AttachSnapshotPopulated_Regression(t *testing.T) {
 	sm := &snapshotSpySessionManager{
 		noopSessionManager: noopSessionManager{},
 		snapshotData: SnapshotData{
-			Scrollback: []byte("scroll-data"),
-			Viewport:   []byte("view-data"),
+			Replay: []byte("\x1b[2J\x1b[Hscroll-data-view-data"),
 		},
 	}
 
@@ -1381,8 +1378,7 @@ func TestDaemon_AttachSnapshotPopulated_Regression(t *testing.T) {
 
 	require.NotNil(t, attachData.Snapshot,
 		"REGRESSION: handleAttach must include snapshot when SessionManager returns data")
-	assert.Equal(t, []byte("scroll-data"), attachData.Snapshot.Scrollback)
-	assert.Equal(t, []byte("view-data"), attachData.Snapshot.Viewport)
+	assert.Equal(t, []byte("\x1b[2J\x1b[Hscroll-data-view-data"), attachData.Snapshot.Replay)
 }
 
 func TestDaemon_MetaSetAndGet(t *testing.T) {
@@ -2821,7 +2817,7 @@ func (n *noopSessionManager) ReadOutput(_ string) ([]byte, error) { return nil, 
 func (n *noopSessionManager) Attach(_ string) error               { return nil }
 func (n *noopSessionManager) Detach(_ string) error               { return nil }
 func (n *noopSessionManager) Snapshot(_ string) (SnapshotData, error) {
-	return SnapshotData{Scrollback: nil, Viewport: nil}, nil
+	return SnapshotData{Replay: nil}, nil
 }
 func (n *noopSessionManager) LastActivity(_ string) (time.Time, error)       { return time.Time{}, nil }
 func (n *noopSessionManager) MetaSet(_, _, _ string) error                   { return nil }

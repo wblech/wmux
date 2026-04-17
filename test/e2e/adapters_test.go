@@ -138,7 +138,7 @@ func (a *sessionAdapter) Snapshot(id string) (daemon.SnapshotData, error) {
 		return daemon.SnapshotData{}, err //nolint:wrapcheck
 	}
 
-	return daemon.SnapshotData{Scrollback: snap.Scrollback, Viewport: snap.Viewport}, nil
+	return daemon.SnapshotData{Replay: snap.Replay}, nil
 }
 
 func (a *sessionAdapter) LastActivity(id string) (time.Time, error) {

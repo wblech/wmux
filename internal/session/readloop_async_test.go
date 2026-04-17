@@ -49,7 +49,7 @@ func (e *panicEmulator) Process(_ []byte) {
 }
 
 func (e *panicEmulator) Snapshot() Snapshot {
-	return Snapshot{Scrollback: nil, Viewport: nil}
+	return Snapshot{Replay: nil}
 }
 func (e *panicEmulator) Resize(_, _ int) {}
 
@@ -74,7 +74,7 @@ func TestReadLoop_EmulatorSlowDoesNotBlockBroadcast(t *testing.T) {
 		mu:       sync.Mutex{},
 		delay:    500 * time.Millisecond,
 		chunks:   nil,
-		snapshot: Snapshot{Scrollback: nil, Viewport: nil},
+		snapshot: Snapshot{Replay: nil},
 	}
 
 	svc := NewService(&pty.UnixSpawner{}, WithEmulatorFactory(fixedEmulatorFactory(emulator)))

@@ -35,12 +35,8 @@ func TestCreateParams_Zero(t *testing.T) {
 }
 
 func TestSnapshot_Empty(t *testing.T) {
-	s := Snapshot{
-		Scrollback: nil,
-		Viewport:   nil,
-	}
-	assert.Nil(t, s.Scrollback)
-	assert.Nil(t, s.Viewport)
+	s := Snapshot{Replay: nil}
+	assert.Nil(t, s.Replay)
 }
 
 func TestSessionInfo_Fields(t *testing.T) {
@@ -66,14 +62,10 @@ func TestAttachResult_WithSnapshot(t *testing.T) {
 			Rows:  0,
 			Shell: "",
 		},
-		Snapshot: Snapshot{
-			Scrollback: []byte("history"),
-			Viewport:   []byte("screen"),
-		},
+		Snapshot: Snapshot{Replay: []byte("\x1b[2J\x1b[Hhello")},
 	}
 	assert.Equal(t, "s1", result.Session.ID)
-	assert.Equal(t, []byte("history"), result.Snapshot.Scrollback)
-	assert.Equal(t, []byte("screen"), result.Snapshot.Viewport)
+	assert.Equal(t, []byte("\x1b[2J\x1b[Hhello"), result.Snapshot.Replay)
 }
 
 func TestEvent_Fields(t *testing.T) {

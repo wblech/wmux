@@ -252,7 +252,7 @@ func cmdCapturePane(args []string) int {
 	}
 
 	// Print viewport content and immediately detach.
-	_, _ = os.Stdout.Write(result.Snapshot.Viewport)
+	_, _ = os.Stdout.Write(result.Snapshot.Replay)
 	_ = c.Detach(target)
 
 	return 0

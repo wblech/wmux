@@ -505,11 +505,8 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	snap, snapErr := d.sessionSvc.Snapshot(req.SessionID)
-	if snapErr == nil && (len(snap.Scrollback) > 0 || len(snap.Viewport) > 0) {
-		resp.Snapshot = &SnapshotResponse{
-			Scrollback: snap.Scrollback,
-			Viewport:   snap.Viewport,
-		}
+	if snapErr == nil && len(snap.Replay) > 0 {
+		resp.Snapshot = &SnapshotResponse{Replay: snap.Replay}
 	}
 
 	_ = c.Control().WriteFrame(okFrame(resp))
@@ -1464,7 +1461,7 @@ func (d *Daemon) handleHistory(c ConnectedClient, frame protocol.Frame) {
 		return
 	}
 
-	data := snap.Scrollback
+	data := snap.Replay
 
 	switch req.Format {
 	case "text":

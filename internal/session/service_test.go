@@ -195,8 +195,7 @@ func TestService_Snapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	// NoneEmulator always returns empty snapshots.
-	assert.Nil(t, snap.Scrollback)
-	assert.Nil(t, snap.Viewport)
+	assert.Nil(t, snap.Replay)
 }
 
 func TestService_ProcessExitDetected(t *testing.T) {

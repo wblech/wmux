@@ -77,16 +77,14 @@ type AttachResponse struct {
 	Snapshot *SnapshotResponse `json:"snapshot,omitempty"`
 }
 
-// SnapshotResponse carries the two-phase snapshot data.
+// SnapshotResponse carries the unified replay snapshot data.
 type SnapshotResponse struct {
-	Scrollback []byte `json:"scrollback"`
-	Viewport   []byte `json:"viewport"`
+	Replay []byte `json:"replay"`
 }
 
 // SnapshotData holds raw terminal snapshot data returned by SessionManager.
 type SnapshotData struct {
-	Scrollback []byte
-	Viewport   []byte
+	Replay []byte
 }
 
 // MetaSetRequest is the JSON payload for MsgMetaSet.

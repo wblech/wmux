@@ -42,10 +42,7 @@ type nonClosableEmulator struct{}
 func (e *nonClosableEmulator) Process(_ []byte) {}
 
 func (e *nonClosableEmulator) Snapshot() Snapshot {
-	return Snapshot{
-		Scrollback: nil,
-		Viewport:   nil,
-	}
+	return Snapshot{Replay: nil}
 }
 
 func (e *nonClosableEmulator) Resize(_, _ int) {}
@@ -59,8 +56,7 @@ func TestEmulatorCloseTypeAssertion(t *testing.T) {
 			closed:     atomic.Bool{},
 			closeCalls: atomic.Int64{},
 			snapshot: Snapshot{
-				Scrollback: nil,
-				Viewport:   nil,
+				Replay: nil,
 			},
 		}
 
@@ -90,8 +86,7 @@ func TestEmulatorCloseTypeAssertion(t *testing.T) {
 			closed:     atomic.Bool{},
 			closeCalls: atomic.Int64{},
 			snapshot: Snapshot{
-				Scrollback: nil,
-				Viewport:   nil,
+				Replay: nil,
 			},
 		}
 
@@ -110,8 +105,7 @@ func TestWaitLoopClosesEmulator(t *testing.T) {
 		closed:     atomic.Bool{},
 		closeCalls: atomic.Int64{},
 		snapshot: Snapshot{
-			Scrollback: nil,
-			Viewport:   nil,
+			Replay: nil,
 		},
 	}
 

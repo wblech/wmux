@@ -33,12 +33,23 @@ type SessionInfo struct {
 	Shell string `json:"shell"`
 }
 
-// Snapshot holds the terminal state captured at attach time.
+// Snapshot is a replayable terminal state. Writing Replay to a VT-compatible
+// terminal (xterm.js, another vt.Emulator, a PTY) reproduces the source
+// terminal's visible state and cursor position.
+//
+// The byte stream is self-contained:
+//   - It begins with a full reset (\e[2J\e[H\e[3J) so any prior state in the
+//     destination is discarded — applying the same Snapshot to any
+//     destination produces the same result (idempotent replay).
+//   - It includes both the scrollback history and the current visible cells
+//     in a single ordered stream.
+//   - It ends with a CUP sequence that positions the cursor where the source
+//     had it.
+//
+// Consumers write Replay as-is to the destination; no ordering, metadata, or
+// post-processing is required.
 type Snapshot struct {
-	// Scrollback contains lines scrolled off the viewport.
-	Scrollback []byte `json:"scrollback"`
-	// Viewport contains the visible terminal content.
-	Viewport []byte `json:"viewport"`
+	Replay []byte `json:"replay"`
 }
 
 // AttachResult holds the session info and snapshot from an attach operation.

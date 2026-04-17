@@ -299,17 +299,14 @@ func TestClient_Attach(t *testing.T) {
 				Rows     int    `json:"rows"`
 				Shell    string `json:"shell"`
 				Snapshot *struct {
-					Scrollback []byte `json:"scrollback"`
-					Viewport   []byte `json:"viewport"`
+					Replay []byte `json:"replay"`
 				} `json:"snapshot,omitempty"`
 			}{
 				ID: "s1", State: "attached", Pid: 42, Cols: 80, Rows: 24, Shell: "/bin/zsh",
 				Snapshot: &struct {
-					Scrollback []byte `json:"scrollback"`
-					Viewport   []byte `json:"viewport"`
+					Replay []byte `json:"replay"`
 				}{
-					Scrollback: []byte("scrollback-data"),
-					Viewport:   []byte("viewport-data"),
+					Replay: []byte("\x1b[2J\x1b[Hreplay-data"),
 				},
 			}
 			return okFrame(resp)
@@ -325,8 +322,7 @@ func TestClient_Attach(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "s1", result.Session.ID)
 	assert.Equal(t, "attached", result.Session.State)
-	assert.Equal(t, []byte("scrollback-data"), result.Snapshot.Scrollback)
-	assert.Equal(t, []byte("viewport-data"), result.Snapshot.Viewport)
+	assert.Equal(t, []byte("\x1b[2J\x1b[Hreplay-data"), result.Snapshot.Replay)
 }
 
 func TestClient_Attach_NoSnapshot(t *testing.T) {
@@ -351,8 +347,7 @@ func TestClient_Attach_NoSnapshot(t *testing.T) {
 	result, err := c.Attach("s1")
 	require.NoError(t, err)
 	assert.Equal(t, "s1", result.Session.ID)
-	assert.Nil(t, result.Snapshot.Scrollback)
-	assert.Nil(t, result.Snapshot.Viewport)
+	assert.Nil(t, result.Snapshot.Replay)
 }
 
 func TestClient_Detach(t *testing.T) {

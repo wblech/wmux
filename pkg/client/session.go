@@ -64,8 +64,7 @@ func (c *Client) Attach(sessionID string) (AttachResult, error) {
 		Rows     int    `json:"rows"`
 		Shell    string `json:"shell"`
 		Snapshot *struct {
-			Scrollback []byte `json:"scrollback"`
-			Viewport   []byte `json:"viewport"`
+			Replay []byte `json:"replay"`
 		} `json:"snapshot,omitempty"`
 	}
 	if err := json.Unmarshal(resp.Payload, &attachResp); err != nil {
@@ -73,7 +72,7 @@ func (c *Client) Attach(sessionID string) (AttachResult, error) {
 	}
 
 	result := AttachResult{
-		Snapshot: Snapshot{Scrollback: nil, Viewport: nil},
+		Snapshot: Snapshot{Replay: nil},
 		Session: SessionInfo{
 			ID:    attachResp.ID,
 			State: attachResp.State,
@@ -84,10 +83,7 @@ func (c *Client) Attach(sessionID string) (AttachResult, error) {
 		},
 	}
 	if attachResp.Snapshot != nil {
-		result.Snapshot = Snapshot{
-			Scrollback: attachResp.Snapshot.Scrollback,
-			Viewport:   attachResp.Snapshot.Viewport,
-		}
+		result.Snapshot = Snapshot{Replay: attachResp.Snapshot.Replay}
 	}
 
 	return result, nil

@@ -142,7 +142,7 @@ func (a *sessionAdapter) Snapshot(id string) (daemon.SnapshotData, error) {
 	if err != nil {
 		return daemon.SnapshotData{}, fmt.Errorf("session adapter: snapshot: %w", err)
 	}
-	return daemon.SnapshotData{Scrollback: snap.Scrollback, Viewport: snap.Viewport}, nil
+	return daemon.SnapshotData{Replay: snap.Replay}, nil
 }
 
 func (a *sessionAdapter) LastActivity(id string) (time.Time, error) {
@@ -221,10 +221,7 @@ func (a *screenEmulatorAdapter) Process(data []byte) {
 
 func (a *screenEmulatorAdapter) Snapshot() session.Snapshot {
 	snap := a.em.Snapshot()
-	return session.Snapshot{
-		Scrollback: snap.Scrollback,
-		Viewport:   snap.Viewport,
-	}
+	return session.Snapshot{Replay: snap.Replay}
 }
 
 func (a *screenEmulatorAdapter) Resize(cols, rows int) {
