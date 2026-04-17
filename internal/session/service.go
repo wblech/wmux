@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -35,6 +36,10 @@ const (
 
 	// defaultBatchInterval is the default flush interval for the output batcher.
 	defaultBatchInterval = 16 * time.Millisecond
+
+	// emulatorChanSize is the buffer size for the async emulator channel.
+	// Large enough to absorb bursts without blocking the readLoop.
+	emulatorChanSize = 64
 )
 
 // Repository defines the persistence operations for sessions.
@@ -479,8 +484,18 @@ func (s *Service) ReadOutput(id string) ([]byte, error) {
 // readLoop continuously reads from the PTY and feeds data to the batcher
 // and emulator. It applies backpressure by sleeping when the buffer is paused.
 // The loop exits when the PTY read returns an error (e.g. EOF after process exit).
+//
+// emulator.Process() runs asynchronously via a dedicated goroutine to prevent
+// slow or blocking emulator processing from stalling PTY reads. TUI apps like
+// vim and Claude Code emit non-standard escape sequences (DCS, extended SGR)
+// that can cause the emulator to block or panic. Running it async ensures the
+// readLoop always drains the PTY, preventing deadlocks where the PTY buffer
+// fills and the child process blocks on write. See ADR 0024.
 func (s *Service) readLoop(ms *managedSession) {
 	buf := make([]byte, readChunkSize)
+
+	emulatorCh := make(chan []byte, emulatorChanSize)
+	go s.emulatorLoop(ms, emulatorCh)
 
 	for {
 		if ms.buffer.Paused() {
@@ -493,7 +508,15 @@ func (s *Service) readLoop(ms *managedSession) {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			ms.batcher.Add(chunk)
-			ms.emulator.Process(chunk)
+
+			select {
+			case emulatorCh <- chunk:
+			default:
+				// Channel full — skip emulator for this chunk.
+				// Broadcast (batcher) already has the data; only snapshot
+				// accuracy is degraded, which self-heals on the next chunk.
+			}
+
 			if ms.historyWriter != nil {
 				_, _ = ms.historyWriter.Write(chunk)
 			}
@@ -501,8 +524,25 @@ func (s *Service) readLoop(ms *managedSession) {
 		}
 
 		if err != nil {
+			close(emulatorCh)
 			return
 		}
+	}
+}
+
+// emulatorLoop processes PTY output chunks through the screen emulator in a
+// dedicated goroutine. It recovers from panics so a misbehaving emulator
+// never kills the readLoop. Chunks are processed in order via the channel.
+func (s *Service) emulatorLoop(ms *managedSession, ch <-chan []byte) {
+	for chunk := range ch {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(os.Stderr, "wmux: emulator.Process panic (session=%s): %v\n", ms.session.ID, r)
+				}
+			}()
+			ms.emulator.Process(chunk)
+		}()
 	}
 }
 
