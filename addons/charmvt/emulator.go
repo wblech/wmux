@@ -111,7 +111,7 @@ func (e *emulator) Snapshot() client.Snapshot {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b[2J\x1b[H\x1b[3J")
 
-	if sb := renderScrollback(e.term, e.cols); sb != nil {
+	if sb := renderScrollbackFrom(e.term, e.cols, 0); sb != nil {
 		buf.Write(sb)
 	}
 

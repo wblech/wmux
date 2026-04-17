@@ -8,23 +8,26 @@ import (
 	"github.com/charmbracelet/x/vt"
 )
 
-// renderScrollback converts the scrollback buffer cells into ANSI byte output.
-func renderScrollback(term *vt.Emulator, cols int) []byte {
+// renderScrollbackFrom converts scrollback buffer cells starting from line
+// `from` into ANSI byte output. Lines before `from` are skipped.
+func renderScrollbackFrom(term *vt.Emulator, cols, from int) []byte {
 	sbLen := term.ScrollbackLen()
-	if sbLen == 0 {
+	if sbLen == 0 || from >= sbLen {
 		return nil
 	}
 
+	lineCount := sbLen - from
 	var buf bytes.Buffer
-	// Pre-allocate: rough estimate of cols * lines bytes.
-	buf.Grow(sbLen * cols)
+	buf.Grow(lineCount * cols)
 
 	var prevStyle uv.Style
+	first := true
 
-	for y := range sbLen {
-		if y > 0 {
+	for y := from; y < sbLen; y++ {
+		if !first {
 			buf.WriteString("\r\n")
 		}
+		first = false
 
 		// Reset style at the start of each line for robustness.
 		if !prevStyle.IsZero() {
