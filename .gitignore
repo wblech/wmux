@@ -55,3 +55,4 @@ _bmad/
 
 # Worktrees
 .worktrees/
+**/.DS_Store

@@ -26,6 +26,7 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 	term := vt.NewEmulator(cols, rows)
 
 	term.SetScrollbackSize(cfg.scrollback)
+	term.SetED2SavesScrollback(false) // xterm/Ghostty behavior: ED2 clears viewport only
 
 	if cfg.logger != nil {
 		term.SetLogger(cfg.logger)
