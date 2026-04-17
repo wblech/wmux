@@ -46,16 +46,16 @@ if err != nil {
 // Session metadata
 log.Printf("pid=%d cols=%d rows=%d", result.Session.Pid, result.Session.Cols, result.Session.Rows)
 
-// Terminal snapshot (requires emulator backend "xterm")
-scrollback := result.Snapshot.Scrollback
-viewport := result.Snapshot.Viewport
+// Terminal snapshot (requires an emulator backend such as charmvt)
+replay := result.Snapshot.Replay
 ```
 
 `AttachResult` contains:
 
 - `Session` -- a `SessionInfo` struct with current metadata.
-- `Snapshot` -- a `Snapshot` struct with `Scrollback` and `Viewport` byte
-  slices. Both are nil when the emulator backend is `"none"`.
+- `Snapshot` -- a `Snapshot` struct with a `Replay` byte slice containing the
+  unified replay stream (scrollback history followed by viewport state).
+  `Replay` is nil when no emulator backend is configured (`"none"`).
 
 ## Detach
 

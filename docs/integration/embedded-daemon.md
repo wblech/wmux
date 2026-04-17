@@ -116,14 +116,14 @@ if err != nil {
     log.Fatal(err)
 }
 
-// result.Snapshot.Viewport contains the visible terminal state.
-// result.Snapshot.Scrollback contains lines above the viewport.
+// result.Snapshot.Replay contains the unified terminal replay bytes
+// (scrollback history followed by viewport state in a single stream).
 log.Printf("attached to %s (%d x %d)",
     result.Session.ID, result.Session.Cols, result.Session.Rows)
 ```
 
 The snapshot is populated when an emulator addon is configured (e.g.,
-`charmvt.Backend()`). Without an addon, both fields are nil.
+`charmvt.Backend()`). Without an addon, `Replay` is nil.
 
 ### Available backends
 
@@ -143,7 +143,6 @@ The scrollback size can be changed at runtime on a live session:
 err := c.UpdateEmulatorScrollback("main", 50000)
 ```
 
-**xterm addon (legacy)** — Requires Node.js on the target:
-
-For maximum xterm.js fidelity, use the xterm addon with the CLI's `--xterm-bin`
-flag or build a custom `EmulatorFactory` wrapping the addon process.
+The `charmvt` backend is the recommended and only maintained emulator addon.
+The xterm Node.js addon was removed in favour of the pure-Go charmvt emulator
+(see ADR 0027).
