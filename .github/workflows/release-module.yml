@@ -1,17 +1,32 @@
-name: Release
+name: Release Module
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       bump:
         description: "Version bump type"
         required: true
-        type: choice
-        options:
-          - beta
-          - patch
-          - minor
-          - major
+        type: string
+      tag-prefix:
+        description: "Git tag prefix (empty for core, 'addons/charmvt/' for addon)"
+        required: true
+        type: string
+      tag-glob:
+        description: "Glob to find latest tag (e.g. 'v[0-9]*')"
+        required: true
+        type: string
+      cliff-config:
+        description: "Path to git-cliff config file"
+        required: true
+        type: string
+      changelog-path:
+        description: "Path to CHANGELOG.md file"
+        required: true
+        type: string
+      module-name:
+        description: "Display name for commit messages and release title"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -40,8 +55,10 @@ jobs:
         id: version
         env:
           BUMP: ${{ inputs.bump }}
+          TAG_PREFIX: ${{ inputs.tag-prefix }}
+          TAG_GLOB: ${{ inputs.tag-glob }}
         run: |
-          LATEST=$(git tag -l 'v[0-9]*' --sort=-v:refname | head -n1)
+          LATEST=$(git tag -l "$TAG_GLOB" --sort=-v:refname | head -n1)
 
           if [ -z "$LATEST" ]; then
             # No tags yet — first release
@@ -51,8 +68,10 @@ jobs:
               NEXT="v0.1.0"
             fi
           else
+            # Strip tag prefix to get version with v
+            V="${LATEST#"$TAG_PREFIX"}"
             # Strip leading v
-            V="${LATEST#v}"
+            V="${V#v}"
 
             # Check if current version is a beta
             if echo "$V" | grep -q "beta"; then
@@ -67,7 +86,6 @@ jobs:
                   NEXT="v${BASE}"
                   ;;
                 minor)
-                  # Increment minor from base
                   MAJOR=$(echo "$BASE" | cut -d. -f1)
                   MINOR=$(echo "$BASE" | cut -d. -f2)
                   NEXT="v${MAJOR}.$((MINOR + 1)).0"
@@ -100,36 +118,38 @@ jobs:
             fi
           fi
 
+          TAG="${TAG_PREFIX}${NEXT}"
           echo "version=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Releasing: $NEXT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Releasing: $TAG"
 
       - name: Generate changelog
         uses: orhun/git-cliff-action@v4
         with:
-          config: cliff.toml
-          args: --tag "${{ steps.version.outputs.version }}"
+          config: ${{ inputs.cliff-config }}
+          args: --tag "${{ steps.version.outputs.tag }}"
         env:
-          OUTPUT: CHANGELOG.md
+          OUTPUT: ${{ inputs.changelog-path }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract release notes
         id: notes
         uses: orhun/git-cliff-action@v4
         with:
-          config: cliff.toml
-          args: --tag "${{ steps.version.outputs.version }}" --unreleased --strip header
+          config: ${{ inputs.cliff-config }}
+          args: --tag "${{ steps.version.outputs.tag }}" --unreleased --strip header
         env:
           OUTPUT: /tmp/release-notes.md
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit changelog
         run: |
-          git add CHANGELOG.md
-          git commit -m "chore(release): ${{ steps.version.outputs.version }}"
+          git add "${{ inputs.changelog-path }}"
+          git commit -m "chore(release): ${{ steps.version.outputs.tag }}"
 
       - name: Create tag
         run: |
-          git tag "${{ steps.version.outputs.version }}"
+          git tag "${{ steps.version.outputs.tag }}"
 
       - name: Push
         run: |
@@ -138,8 +158,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: ${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "${{ inputs.module-name }} ${{ steps.version.outputs.version }}"
           body_path: /tmp/release-notes.md
           prerelease: ${{ contains(steps.version.outputs.version, 'beta') }}
         env:

@@ -1,0 +1,28 @@
+name: "Release: charmvt"
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - beta
+          - patch
+          - minor
+          - major
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-module.yml
+    with:
+      bump: ${{ inputs.bump }}
+      tag-prefix: "addons/charmvt/"
+      tag-glob: "addons/charmvt/v[0-9]*"
+      cliff-config: "cliff-charmvt.toml"
+      changelog-path: "addons/charmvt/CHANGELOG.md"
+      module-name: "charmvt"
+    secrets: inherit
+    permissions:
+      contents: write
