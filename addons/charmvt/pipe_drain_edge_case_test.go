@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Edge case tests for the pipe drain fix (ADR 0025).
@@ -32,7 +33,7 @@ func TestEdgeCase_CloseStopsDrainGoroutine(t *testing.T) {
 func TestEdgeCase_DoubleCloseNoPanic(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
 
-	assert.NoError(t, em.Close())
+	require.NoError(t, em.Close())
 	// Second close should not panic. vt.Emulator.Close() is idempotent.
 	assert.NotPanics(t, func() {
 		_ = em.Close()
@@ -60,7 +61,7 @@ func TestEdgeCase_SnapshotAfterClose(t *testing.T) {
 	// screen buffer. The pipe is closed but the screen data persists.
 	assert.NotPanics(t, func() {
 		snap := em.Snapshot()
-		_ = snap.Viewport
+		_ = snap.Replay
 	})
 }
 
@@ -68,7 +69,7 @@ func TestEdgeCase_SnapshotAfterClose(t *testing.T) {
 
 func TestEdgeCase_DA1AsFirstBytesEver(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// DA1 as the very first data — no prior state.
 	assertProcessCompletes(t, em, []byte("\x1b[c"), "first-bytes-DA1")
@@ -76,7 +77,7 @@ func TestEdgeCase_DA1AsFirstBytesEver(t *testing.T) {
 
 func TestEdgeCase_DA1AfterPartialEscapeSequence(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Send a partial escape sequence, then a DA1.
 	// The parser should handle the state transition gracefully.
@@ -86,7 +87,7 @@ func TestEdgeCase_DA1AfterPartialEscapeSequence(t *testing.T) {
 
 func TestEdgeCase_DA1SplitAcrossChunks(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// DA1 (\x1b[c) split across two Process calls.
 	// First chunk: ESC [   Second chunk: c
@@ -96,7 +97,7 @@ func TestEdgeCase_DA1SplitAcrossChunks(t *testing.T) {
 
 func TestEdgeCase_DA1ByteByByte(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Each byte of DA1 sent individually.
 	em.Process([]byte{0x1b})
@@ -108,26 +109,26 @@ func TestEdgeCase_DA1ByteByByte(t *testing.T) {
 
 func TestEdgeCase_DA1AfterUTF8Content(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// UTF-8 multi-byte characters followed by DA1.
 	em.Process([]byte("こんにちは世界 🌍"))
 	assertProcessCompletes(t, em, []byte("\x1b[c"), "DA1-after-utf8")
 
 	snap := em.Snapshot()
-	assert.Contains(t, string(snap.Viewport), "こんにちは世界")
+	assert.Contains(t, string(snap.Replay), "こんにちは世界")
 }
 
 func TestEdgeCase_DA1InterleavedWithUTF8(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Single chunk: UTF-8 + DA1 + more UTF-8.
 	payload := []byte("日本語\x1b[cрусский")
 	assertProcessCompletes(t, em, payload, "utf8-DA1-utf8")
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 	assert.Contains(t, vp, "日本語")
 	assert.Contains(t, vp, "русский")
 }
@@ -136,7 +137,7 @@ func TestEdgeCase_DA1InterleavedWithUTF8(t *testing.T) {
 
 func TestEdgeCase_DA1InAltScreen(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	em.Process([]byte("main content"))
 	em.Process([]byte("\x1b[?1049h")) // enter alt screen
@@ -144,13 +145,13 @@ func TestEdgeCase_DA1InAltScreen(t *testing.T) {
 	assertProcessCompletes(t, em, []byte("\x1b[c"), "DA1-in-alt-screen")
 
 	snap := em.Snapshot()
-	assert.Contains(t, string(snap.Viewport), "alt content")
-	assert.NotContains(t, string(snap.Viewport), "main content")
+	assert.Contains(t, string(snap.Replay), "alt content")
+	assert.NotContains(t, string(snap.Replay), "main content")
 }
 
 func TestEdgeCase_DA1DuringAltScreenTransition(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Enter alt screen, DA1, exit alt screen — all in one chunk.
 	payload := []byte("\x1b[?1049halt text\x1b[c\x1b[?1049l")
@@ -236,14 +237,14 @@ func TestEdgeCase_ConcurrentCloseAndSnapshot(t *testing.T) {
 
 func TestEdgeCase_RapidAlternatingQueriesAndContent(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Alternate between query and content bytes rapidly.
 	queries := [][]byte{
-		{0x1b, '[', 'c'},       // DA1
-		{0x1b, '[', '>', 'c'},  // DA2
-		{0x1b, '[', '6', 'n'},  // CPR
-		{0x1b, '[', '5', 'n'},  // Status
+		{0x1b, '[', 'c'},           // DA1
+		{0x1b, '[', '>', 'c'},      // DA2
+		{0x1b, '[', '6', 'n'},      // CPR
+		{0x1b, '[', '5', 'n'},      // Status
 		{0x1b, '[', '?', '6', 'n'}, // DECXCPR
 	}
 
@@ -269,17 +270,17 @@ func TestEdgeCase_RapidAlternatingQueriesAndContent(t *testing.T) {
 
 func TestEdgeCase_SmallTerminalDA1(t *testing.T) {
 	em := newEmulator("test", 1, 1, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[c"), "1x1-terminal-DA1")
 }
 
 func TestEdgeCase_LargeTerminalDA1(t *testing.T) {
 	em := newEmulator("test", 500, 200, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[c"), "500x200-terminal-DA1")
 
 	snap := em.Snapshot()
-	assert.NotNil(t, snap.Viewport)
+	assert.NotNil(t, snap.Replay)
 }

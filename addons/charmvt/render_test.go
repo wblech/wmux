@@ -9,13 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRenderScrollback_Empty verifies that a fresh emulator (no overflow) returns nil scrollback.
+// TestRenderScrollback_Empty verifies that a fresh emulator (no overflow) produces a replay
+// with only the clear prefix and cursor-restore CUP — no scrollback content.
 func TestRenderScrollback_Empty(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("render-empty", 80, 24, cfg)
 
 	snap := em.Snapshot()
-	assert.Nil(t, snap.Scrollback)
+	require.True(t, strings.HasPrefix(string(snap.Replay), "\x1b[2J\x1b[H\x1b[3J"),
+		"replay must begin with clear prefix")
+	tail := string(snap.Replay[len("\x1b[2J\x1b[H\x1b[3J"):])
+	assert.Regexp(t, `^\x1b\[\d+;\d+H$`, tail,
+		"empty emulator replay should contain only the clear prefix and final CUP")
 }
 
 // TestRenderScrollback_PlainText verifies that plain-text lines pushed past a 3-row viewport appear
@@ -34,9 +39,9 @@ func TestRenderScrollback_PlainText(t *testing.T) {
 	em.Process([]byte(strings.Join(lines, "\r\n")))
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
+	require.NotNil(t, snap.Replay, "scrollback must not be nil after overflow")
 
-	sb := string(snap.Scrollback)
+	sb := string(snap.Replay)
 
 	// At least one of the early lines must appear in scrollback.
 	found := false
@@ -62,9 +67,9 @@ func TestRenderScrollback_ColoredText(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
+	require.NotNil(t, snap.Replay, "scrollback must not be nil after overflow")
 
-	sb := string(snap.Scrollback)
+	sb := string(snap.Replay)
 
 	// SGR sequence must be present.
 	assert.Contains(t, sb, "\033[")
@@ -92,9 +97,9 @@ func TestRenderScrollback_BoldAndColor(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
+	require.NotNil(t, snap.Replay, "scrollback must not be nil after overflow")
 
-	sb := string(snap.Scrollback)
+	sb := string(snap.Replay)
 
 	// At least one early line's text must appear in scrollback.
 	found := false
@@ -122,9 +127,9 @@ func TestRenderScrollback_TrailingSpacesTrimmed(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
+	require.NotNil(t, snap.Replay, "scrollback must not be nil after overflow")
 
-	sb := string(snap.Scrollback)
+	sb := string(snap.Replay)
 	lines := strings.Split(sb, "\r\n")
 
 	for _, line := range lines {
@@ -148,9 +153,9 @@ func TestRenderScrollback_TerminalLineEndings(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after overflow")
+	require.NotNil(t, snap.Replay, "scrollback must not be nil after overflow")
 
-	sb := string(snap.Scrollback)
+	sb := string(snap.Replay)
 
 	// Must contain \r\n between lines.
 	assert.Contains(t, sb, "\r\n", "scrollback should use \\r\\n line endings")

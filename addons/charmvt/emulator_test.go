@@ -1,6 +1,7 @@
 package charmvt
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -9,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEmulator_ProcessAndSnapshot verifies that written content appears in the viewport.
+// TestEmulator_ProcessAndSnapshot verifies that written content appears in the replay.
 func TestEmulator_ProcessAndSnapshot(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-1", 80, 24, cfg)
@@ -17,24 +18,25 @@ func TestEmulator_ProcessAndSnapshot(t *testing.T) {
 	em.Process([]byte("hello world"))
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Viewport)
-	assert.Contains(t, string(snap.Viewport), "hello world")
+	require.NotNil(t, snap.Replay)
+	assert.Contains(t, string(snap.Replay), "hello world")
 }
 
-// TestEmulator_EmptySnapshot verifies that a fresh emulator has no trailing empty rows
-// and nil Scrollback.
+// TestEmulator_EmptySnapshot verifies that a fresh emulator's Replay is just
+// the clear prefix + cursor-restore CUP.
 func TestEmulator_EmptySnapshot(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-empty", 80, 24, cfg)
 
 	snap := em.Snapshot()
-	assert.NotNil(t, snap.Viewport)
-	assert.NotContains(t, string(snap.Viewport), "\n",
-		"empty viewport should have no newlines (trailing empty rows stripped)")
-	assert.Nil(t, snap.Scrollback)
+	assert.True(t, bytes.HasPrefix(snap.Replay, []byte("\x1b[2J\x1b[H\x1b[3J")),
+		"snapshot must begin with clear prefix")
+	tail := snap.Replay[len("\x1b[2J\x1b[H\x1b[3J"):]
+	assert.Regexp(t, `^\x1b\[\d+;\d+H$`, string(tail),
+		"empty viewport should have only the cursor-restore CUP after the clear prefix")
 }
 
-// TestEmulator_SGR_Colors verifies that SGR color sequences are accepted and the plain text appears in the viewport.
+// TestEmulator_SGR_Colors verifies that SGR color sequences are accepted and the plain text appears in the replay.
 func TestEmulator_SGR_Colors(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-colors", 80, 24, cfg)
@@ -42,7 +44,7 @@ func TestEmulator_SGR_Colors(t *testing.T) {
 	em.Process([]byte("\033[31mred text\033[0m"))
 
 	snap := em.Snapshot()
-	assert.Contains(t, string(snap.Viewport), "red text")
+	assert.Contains(t, string(snap.Replay), "red text")
 }
 
 // TestEmulator_AltScreen verifies alt-screen switching: content appears on the correct screen.
@@ -58,15 +60,15 @@ func TestEmulator_AltScreen(t *testing.T) {
 	em.Process([]byte("alt content"))
 
 	snapAlt := em.Snapshot()
-	assert.Contains(t, string(snapAlt.Viewport), "alt content")
+	assert.Contains(t, string(snapAlt.Replay), "alt content")
 
 	// Exit alt screen; main content should be visible again.
 	em.Process([]byte("\033[?1049l"))
 	snapMain := em.Snapshot()
-	assert.Contains(t, string(snapMain.Viewport), "main content")
+	assert.Contains(t, string(snapMain.Replay), "main content")
 }
 
-// TestEmulator_TerminalLineEndings verifies that the viewport uses \r\n line endings.
+// TestEmulator_TerminalLineEndings verifies that the replay uses \r\n line endings.
 func TestEmulator_TerminalLineEndings(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-crlf", 80, 24, cfg)
@@ -74,7 +76,7 @@ func TestEmulator_TerminalLineEndings(t *testing.T) {
 	em.Process([]byte("line one\r\nline two"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 	assert.Contains(t, vp, "line one\r\nline two")
 	assert.NotContains(t, vp, "\n\r\n", "should not have bare \\n before \\r\\n")
 }
@@ -88,11 +90,11 @@ func TestEmulator_NoTrailingEmptyRows(t *testing.T) {
 	em.Process([]byte("only line"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
-	assert.True(t, strings.HasPrefix(vp, "only line"),
-		"viewport should start with content")
-	assert.False(t, strings.HasSuffix(vp, "\r\n"),
-		"viewport should not end with empty rows")
+	body := strings.TrimPrefix(string(snap.Replay), "\x1b[2J\x1b[H\x1b[3J")
+	assert.Contains(t, body, "only line",
+		"replay should contain the written content")
+	assert.Regexp(t, `\x1b\[\d+;\d+H$`, string(snap.Replay),
+		"replay should end with a CUP sequence, not trailing empty rows")
 }
 
 // TestEmulator_Callbacks_Title verifies that the Title callback receives the correct session ID and title.
@@ -101,10 +103,13 @@ func TestEmulator_Callbacks_Title(t *testing.T) {
 
 	cfg := defaultConfig()
 	WithCallbacks(Callbacks{
+		Bell: nil,
 		Title: func(sid, title string) {
 			gotSession = sid
 			gotTitle = title
 		},
+		WorkingDirectory: nil,
+		AltScreen:        nil,
 	})(cfg)
 
 	em := newEmulator("cb-title-session", 80, 24, cfg)
@@ -124,10 +129,10 @@ func TestEmulator_NilCallbacks_NoPanic(t *testing.T) {
 	em := newEmulator("session-no-cb", 80, 24, cfg)
 
 	assert.NotPanics(t, func() {
-		em.Process([]byte("\x07"))              // BEL
-		em.Process([]byte("\033]0;title\007"))  // OSC 0 title via BEL
-		em.Process([]byte("\033[?1049h"))       // enter alt screen
-		em.Process([]byte("\033[?1049l"))       // exit alt screen
+		em.Process([]byte("\x07"))             // BEL
+		em.Process([]byte("\033]0;title\007")) // OSC 0 title via BEL
+		em.Process([]byte("\033[?1049h"))      // enter alt screen
+		em.Process([]byte("\033[?1049l"))      // exit alt screen
 	})
 }
 
@@ -143,13 +148,13 @@ func TestEmulator_SetScrollbackSize(t *testing.T) {
 	}
 
 	snap1 := em.Snapshot()
-	require.NotNil(t, snap1.Scrollback)
+	require.NotEmpty(t, snap1.Replay)
 
 	// Increase scrollback — no data loss.
 	em.SetScrollbackSize(200)
 
 	snap2 := em.Snapshot()
-	assert.Equal(t, snap1.Scrollback, snap2.Scrollback)
+	assert.Equal(t, snap1.Replay, snap2.Replay)
 }
 
 // TestEmulator_SetScrollbackSize_Decrease verifies that decreasing the scrollback size trims oldest lines.
@@ -163,14 +168,13 @@ func TestEmulator_SetScrollbackSize_Decrease(t *testing.T) {
 	}
 
 	snap1 := em.Snapshot()
-	require.NotNil(t, snap1.Scrollback)
+	require.NotEmpty(t, snap1.Replay)
 
 	// Decrease scrollback — oldest lines trimmed.
 	em.SetScrollbackSize(10)
 
 	snap2 := em.Snapshot()
-	// Should have less scrollback than before.
-	assert.Less(t, len(snap2.Scrollback), len(snap1.Scrollback))
+	assert.Less(t, len(snap2.Replay), len(snap1.Replay))
 }
 
 // TestEmulator_ScrollbackWithStyles verifies that styled lines pushed into scrollback contain SGR sequences
@@ -188,14 +192,14 @@ func TestEmulator_ScrollbackWithStyles(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback must not be nil after lines overflow the viewport")
+	require.NotEmpty(t, snap.Replay, "replay must not be empty after lines overflow the viewport")
 
-	sb := string(snap.Scrollback)
+	sb := string(snap.Replay)
 
-	// The bold SGR open sequence must appear in the scrollback output.
+	// The bold SGR open sequence must appear in the replay.
 	assert.Contains(t, sb, "\033[")
 
-	// At least one early line label must appear in scrollback text.
+	// At least one early line label must appear in the replay text.
 	found := false
 	for i := range 7 {
 		if strings.Contains(sb, fmt.Sprintf("line %02d", i)) {
@@ -203,5 +207,5 @@ func TestEmulator_ScrollbackWithStyles(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "scrollback should contain text from one of the early lines")
+	assert.True(t, found, "replay should contain text from one of the early lines")
 }

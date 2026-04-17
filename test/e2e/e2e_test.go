@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"path/filepath"
@@ -446,4 +447,69 @@ func TestE2E_NoneBackend_EmptySnapshot(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Nil(t, result.Snapshot.Replay)
+}
+
+// TestE2E_CharmVT_AttachReplayIsSelfContained is a regression test for the
+// watchtower "duplicated banner on project switch" bug. The Attach Replay
+// must be a full-state replacement — applying it to a destination emulator
+// that already holds stale content must erase the stale content, and the
+// final rendered state must contain each source marker exactly once.
+func TestE2E_CharmVT_AttachReplayIsSelfContained(t *testing.T) {
+	env := startTestDaemonWithCharmVT(t)
+	c := connectTestClient(t, env)
+
+	// Create a session whose output mimics the real bug: shell history,
+	// then a TUI-style full-screen redraw (\e[2J\e[H + banner).
+	script := `printf '$ claude\r\n'; printf '\x1b[2J\x1b[H'; printf 'BANNER-MARKER'; sleep 10`
+	_, err := c.Create("replay-regression", client.CreateParams{
+		Shell: "/bin/sh",
+		Args:  []string{"-c", script},
+		Cols:  80,
+		Rows:  24,
+		Cwd:   "",
+		Env:   nil,
+	})
+	require.NoError(t, err)
+
+	var snap client.Snapshot
+	require.Eventually(t, func() bool {
+		result, attachErr := c.Attach("replay-regression")
+		if attachErr != nil || len(result.Snapshot.Replay) == 0 {
+			return false
+		}
+		if !strings.Contains(string(result.Snapshot.Replay), "BANNER-MARKER") {
+			return false
+		}
+		snap = result.Snapshot
+		return true
+	}, 5*time.Second, 100*time.Millisecond,
+		"Attach must return a Replay containing the banner marker")
+
+	// Replay contract 1: stream begins with the clear prefix.
+	assert.True(t,
+		bytes.HasPrefix(snap.Replay, []byte("\x1b[2J\x1b[H\x1b[3J")),
+		"Replay must begin with full clear (\\e[2J\\e[H\\e[3J)")
+
+	// Replay contract 2: apply to a dirty in-process emulator and verify
+	// no stale content leaks through.
+	dst := newE2EDestinationEmulator(t, 80, 24)
+	dst.Process([]byte("STALE CONTENT FROM PRIOR TAB\r\n"))
+	dst.Process([]byte("\x1b[10;1HANOTHER STALE ROW\r\n"))
+	dst.Process(snap.Replay)
+
+	dstReplay := dst.Snapshot().Replay
+	assert.NotContains(t, string(dstReplay), "STALE CONTENT FROM PRIOR TAB",
+		"Replay must erase prior destination content")
+	assert.NotContains(t, string(dstReplay), "ANOTHER STALE ROW")
+	// Banner marker must appear exactly once.
+	assert.Equal(t, 1, strings.Count(string(dstReplay), "BANNER-MARKER"),
+		"banner marker must appear exactly once — no duplication")
+}
+
+// newE2EDestinationEmulator creates an in-process charmvt emulator mimicking
+// a downstream consumer (e.g., watchtower's xterm.js-equivalent surface).
+func newE2EDestinationEmulator(t *testing.T, cols, rows int) client.ScreenEmulator {
+	t.Helper()
+	factory := charmvt.NewEmulatorFactory()
+	return factory.Create("e2e-dst", cols, rows)
 }

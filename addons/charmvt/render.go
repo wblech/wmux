@@ -29,7 +29,7 @@ func renderScrollback(term *vt.Emulator, cols int) []byte {
 		// Reset style at the start of each line for robustness.
 		if !prevStyle.IsZero() {
 			buf.WriteString("\x1b[m")
-			prevStyle = uv.Style{}
+			prevStyle = uv.Style{Fg: nil, Bg: nil, UnderlineColor: nil, Underline: 0, Attrs: 0}
 		}
 
 		// Build the line content, tracking the last non-space column for trimming.
@@ -80,6 +80,11 @@ func renderScrollback(term *vt.Emulator, cols int) []byte {
 	if !prevStyle.IsZero() {
 		buf.WriteString("\x1b[m")
 	}
+
+	// Terminate the last scrollback line so that the viewport content that
+	// follows in Snapshot() starts on a fresh line rather than concatenating
+	// directly onto the last scrollback character.
+	buf.WriteString("\r\n")
 
 	return buf.Bytes()
 }

@@ -1,6 +1,7 @@
 package charmvt
 
 import (
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ import (
 // DA1 = \x1b[c — exactly 3 bytes, matching the investigation finding.
 func TestEvidence_DA1_Blocks(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	done := make(chan struct{})
 	go func() {
@@ -47,7 +48,7 @@ func TestEvidence_DA1_Blocks(t *testing.T) {
 // Attributes, \x1b[>c).
 func TestEvidence_DA2_Blocks(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	done := make(chan struct{})
 	go func() {
@@ -67,7 +68,7 @@ func TestEvidence_DA2_Blocks(t *testing.T) {
 // (Device Status Report — Cursor Position Report, \x1b[6n).
 func TestEvidence_DSR_CursorPosition_Blocks(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	done := make(chan struct{})
 	go func() {
@@ -87,7 +88,7 @@ func TestEvidence_DSR_CursorPosition_Blocks(t *testing.T) {
 // (Operating Status Report, \x1b[5n).
 func TestEvidence_DSR_OperatingStatus_Blocks(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	done := make(chan struct{})
 	go func() {
@@ -107,7 +108,7 @@ func TestEvidence_DSR_OperatingStatus_Blocks(t *testing.T) {
 // (Extended Cursor Position Report, \x1b[?6n).
 func TestEvidence_DECXCPR_Blocks(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	done := make(chan struct{})
 	go func() {
@@ -140,7 +141,7 @@ func TestEvidence_DrainedPipe_Unblocks(t *testing.T) {
 	for _, tc := range sequences {
 		t.Run(tc.name, func(t *testing.T) {
 			em := vt.NewEmulator(80, 24)
-			defer em.Close()
+			defer func() { _ = em.Close() }()
 
 			// Drain the response pipe — this is what charmvt should do.
 			go func() {
@@ -175,7 +176,7 @@ func TestEvidence_DrainedPipe_Unblocks(t *testing.T) {
 // the emulator processes the normal bytes fine, then hangs on the DA1.
 func TestEvidence_MixedContent_BlocksMidStream(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Normal TUI content followed by DA1 query — a single Write call.
 	payload := []byte("hello world\x1b[31mred text\x1b[0m\x1b[c")
@@ -204,14 +205,14 @@ func TestEvidence_MixedContent_BlocksMidStream(t *testing.T) {
 // is correct — the issue is purely that nobody reads it.
 func TestEvidence_PipeResponse_Content(t *testing.T) {
 	em := vt.NewEmulator(80, 24)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Read the response in a goroutine.
 	responseCh := make(chan []byte, 1)
 	go func() {
 		buf := make([]byte, 256)
 		n, err := em.Read(buf)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			return
 		}
 		responseCh <- buf[:n]

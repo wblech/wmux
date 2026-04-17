@@ -1,6 +1,7 @@
 package charmvt
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"sync"
@@ -31,7 +32,21 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 	}
 
 	if cfg.callbacks != nil {
-		cb := vt.Callbacks{}
+		cb := vt.Callbacks{
+			Bell:             nil,
+			Title:            nil,
+			IconName:         nil,
+			AltScreen:        nil,
+			CursorPosition:   nil,
+			CursorVisibility: nil,
+			CursorStyle:      nil,
+			CursorColor:      nil,
+			BackgroundColor:  nil,
+			ForegroundColor:  nil,
+			WorkingDirectory: nil,
+			EnableMode:       nil,
+			DisableMode:      nil,
+		}
 		if cfg.callbacks.Bell != nil {
 			fn := cfg.callbacks.Bell
 			cb.Bell = func() { fn(sessionID) }
@@ -56,6 +71,12 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 	// io.Pipe. Without a reader, Write() deadlocks. These responses are
 	// safely discarded — the real terminal (xterm.js) handles them.
 	// The goroutine exits when term.Close() is called (pipe returns EOF).
+	//
+	// Known limitation: vt.Emulator.Close() and vt.Emulator.Read() both
+	// access an unsynchronized `closed` bool inside the upstream library.
+	// This means a concurrent Close()/Read() call can trigger a data race
+	// under -race. This is a pre-existing upstream issue and is not
+	// introduced by this package.
 	go drainResponsePipe(term)
 
 	return &emulator{mu: sync.Mutex{}, term: term, cols: cols}
@@ -80,30 +101,28 @@ func (e *emulator) Process(data []byte) {
 	_, _ = e.term.Write(data)
 }
 
-// Snapshot returns the current terminal screen state.
-// Viewport uses \r\n line endings with trailing empty rows stripped.
-// Scrollback uses \r\n line endings.
+// Snapshot returns the current terminal state as a self-contained replay
+// byte stream. See pkg/client.Snapshot godoc for the replay contract.
 func (e *emulator) Snapshot() client.Snapshot {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 
+	var buf bytes.Buffer
+	buf.WriteString("\x1b[2J\x1b[H\x1b[3J")
+
+	if sb := renderScrollback(e.term, e.cols); sb != nil {
+		buf.Write(sb)
+	}
+
 	viewport := e.term.Render()
 	viewport = trimTrailingEmptyRows(viewport)
 	viewport = toTerminalLineEndings(viewport)
+	buf.WriteString(viewport)
 
-	// Append a CUP (Cursor Position) escape to restore the cursor where
-	// the emulator has it. Without this, xterm.js leaves the cursor at
-	// the end of the last written text after a warm reconnect snapshot,
-	// causing visual desync between cursor and prompt.
 	pos := e.term.CursorPosition()
-	viewport += fmt.Sprintf("\x1b[%d;%dH", pos.Y+1, pos.X+1)
+	fmt.Fprintf(&buf, "\x1b[%d;%dH", pos.Y+1, pos.X+1)
 
-	scrollback := renderScrollback(e.term, e.cols)
-
-	return client.Snapshot{
-		Viewport:   []byte(viewport),
-		Scrollback: scrollback,
-	}
+	return client.Snapshot{Replay: buf.Bytes()}
 }
 
 // SetScrollbackSize changes the scrollback buffer size at runtime.
@@ -118,7 +137,10 @@ func (e *emulator) SetScrollbackSize(lines int) {
 // Close shuts down the emulator and stops the drain goroutine.
 // Implements io.Closer so the session layer can clean up via type assertion.
 func (e *emulator) Close() error {
-	return e.term.Close()
+	if err := e.term.Close(); err != nil {
+		return fmt.Errorf("emulator close: %w", err)
+	}
+	return nil
 }
 
 // Resize updates the terminal dimensions.

@@ -28,35 +28,35 @@ const processTimeout = 100 * time.Millisecond
 
 func TestRegression_ProcessDA1Completes(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[c"), "DA1")
 }
 
 func TestRegression_ProcessDA2Completes(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[>c"), "DA2")
 }
 
 func TestRegression_ProcessDSR_CursorPositionCompletes(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[6n"), "DSR CPR")
 }
 
 func TestRegression_ProcessDSR_OperatingStatusCompletes(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[5n"), "DSR Status")
 }
 
 func TestRegression_ProcessDECXCPRCompletes(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	assertProcessCompletes(t, em, []byte("\x1b[?6n"), "DECXCPR")
 }
@@ -65,21 +65,21 @@ func TestRegression_ProcessDECXCPRCompletes(t *testing.T) {
 
 func TestRegression_SnapshotAfterDA1(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	em.Process([]byte("before query"))
 	em.Process([]byte("\x1b[c"))
 	em.Process([]byte(" after query"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 	assert.Contains(t, vp, "before query")
 	assert.Contains(t, vp, "after query")
 }
 
 func TestRegression_SnapshotDuringConcurrentDA1(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	em.Process([]byte("initial content\r\n"))
 
@@ -101,7 +101,7 @@ func TestRegression_SnapshotDuringConcurrentDA1(t *testing.T) {
 		defer wg.Done()
 		for range 50 {
 			snap := em.Snapshot()
-			_ = snap.Viewport // must not panic
+			_ = snap.Replay // must not panic
 		}
 	}()
 
@@ -123,19 +123,19 @@ func TestRegression_SnapshotDuringConcurrentDA1(t *testing.T) {
 
 func TestRegression_MixedContentWithQueriesCompletes(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Simulates TUI output: normal content interspersed with terminal queries.
 	chunks := [][]byte{
-		[]byte("\x1b[?1049h"),                          // enter alt screen
-		[]byte("\x1b[H\x1b[2J"),                        // clear
+		[]byte("\x1b[?1049h"),                         // enter alt screen
+		[]byte("\x1b[H\x1b[2J"),                       // clear
 		[]byte("\x1b[1;1H\x1b[38;5;82mstatus\x1b[0m"), // styled content
-		[]byte("\x1b[c"),                                // DA1 query
-		[]byte("\x1b[6n"),                               // cursor position report
-		[]byte("\x1b[2;1Hmore content"),                 // more content
-		[]byte("\x1b[>c"),                               // DA2 query
-		[]byte("\x1b[5n"),                               // operating status
-		[]byte("\x1b[3;1Hfinal line"),                   // more content
+		[]byte("\x1b[c"),                              // DA1 query
+		[]byte("\x1b[6n"),                             // cursor position report
+		[]byte("\x1b[2;1Hmore content"),               // more content
+		[]byte("\x1b[>c"),                             // DA2 query
+		[]byte("\x1b[5n"),                             // operating status
+		[]byte("\x1b[3;1Hfinal line"),                 // more content
 	}
 
 	done := make(chan struct{})
@@ -149,7 +149,7 @@ func TestRegression_MixedContentWithQueriesCompletes(t *testing.T) {
 	select {
 	case <-done:
 		snap := em.Snapshot()
-		vp := string(snap.Viewport)
+		vp := string(snap.Replay)
 		assert.Contains(t, vp, "status")
 		assert.Contains(t, vp, "more content")
 		assert.Contains(t, vp, "final line")
@@ -160,7 +160,7 @@ func TestRegression_MixedContentWithQueriesCompletes(t *testing.T) {
 
 func TestRegression_AllQueryTypesInSingleChunk(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// All query types concatenated in one Write() call.
 	payload := []byte("text\x1b[c\x1b[>c\x1b[5n\x1b[6n\x1b[?6nmore text")
@@ -168,7 +168,7 @@ func TestRegression_AllQueryTypesInSingleChunk(t *testing.T) {
 	assertProcessCompletes(t, em, payload, "all-queries-single-chunk")
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 	assert.Contains(t, vp, "text")
 	assert.Contains(t, vp, "more text")
 }
@@ -177,7 +177,7 @@ func TestRegression_AllQueryTypesInSingleChunk(t *testing.T) {
 
 func TestRegression_RepeatedDA1DoesNotDegrade(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Send 1000 DA1 queries. Without drain, the first one blocks.
 	// With drain, all should complete quickly.
@@ -203,7 +203,7 @@ func TestRegression_HighThroughputWithQueries(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.scrollback = 1000
 	em := newEmulator("test", 120, 24, cfg)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	done := make(chan struct{})
 	go func() {
@@ -220,8 +220,8 @@ func TestRegression_HighThroughputWithQueries(t *testing.T) {
 	select {
 	case <-done:
 		snap := em.Snapshot()
-		require.NotNil(t, snap.Scrollback, "scrollback should be populated after 500 lines")
-		assert.Contains(t, string(snap.Viewport), "line 0499")
+		require.NotNil(t, snap.Replay, "scrollback should be populated after 500 lines")
+		assert.Contains(t, string(snap.Replay), "line 0499")
 	case <-time.After(5 * time.Second):
 		t.Fatal("high-throughput processing with queries blocked")
 	}
@@ -248,7 +248,7 @@ func assertProcessCompletes(t *testing.T, em *emulator, data []byte, label strin
 
 func TestRegression_ViewportNotCorruptedByQueries(t *testing.T) {
 	em := newEmulator("test", 40, 10, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Write a known pattern, then queries, then verify content is intact.
 	for i := range 8 {
@@ -258,7 +258,7 @@ func TestRegression_ViewportNotCorruptedByQueries(t *testing.T) {
 	em.Process([]byte("\x1b[9;1Hfinal row"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	for i := range 8 {
 		expected := fmt.Sprintf("row %d content", i)
@@ -271,7 +271,7 @@ func TestRegression_ScrollbackPreservedAcrossQueries(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.scrollback = 500
 	em := newEmulator("test", 80, 5, cfg)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Fill scrollback.
 	for i := range 20 {
@@ -279,7 +279,7 @@ func TestRegression_ScrollbackPreservedAcrossQueries(t *testing.T) {
 	}
 
 	snap1 := em.Snapshot()
-	require.NotNil(t, snap1.Scrollback)
+	require.NotNil(t, snap1.Replay)
 
 	// Process queries — scrollback should not be affected.
 	for range 10 {
@@ -287,7 +287,7 @@ func TestRegression_ScrollbackPreservedAcrossQueries(t *testing.T) {
 	}
 
 	snap2 := em.Snapshot()
-	assert.Equal(t, snap1.Scrollback, snap2.Scrollback,
+	assert.Equal(t, snap1.Replay, snap2.Replay,
 		"scrollback should not change from query processing")
 }
 
@@ -295,7 +295,7 @@ func TestRegression_ScrollbackPreservedAcrossQueries(t *testing.T) {
 
 func TestRegression_ConcurrentProcessSnapshotResize(t *testing.T) {
 	em := newEmulator("test", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
@@ -330,7 +330,7 @@ func TestRegression_ConcurrentProcessSnapshotResize(t *testing.T) {
 				return
 			default:
 				snap := em.Snapshot()
-				_ = snap.Viewport
+				_ = snap.Replay
 				snapshots.Add(1)
 			}
 		}
@@ -358,5 +358,5 @@ func TestRegression_ConcurrentProcessSnapshotResize(t *testing.T) {
 	wg.Wait()
 
 	t.Logf("snapshots taken during concurrent test: %d", snapshots.Load())
-	assert.Greater(t, snapshots.Load(), int64(0), "should have taken at least one snapshot")
+	assert.Positive(t, snapshots.Load(), "should have taken at least one snapshot")
 }

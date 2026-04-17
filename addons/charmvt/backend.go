@@ -21,3 +21,14 @@ func Backend(opts ...Option) client.Option {
 	}
 	return client.WithEmulatorFactory(&factory{cfg: cfg})
 }
+
+// NewEmulatorFactory returns an emulator factory for direct, in-process use
+// by consumers that need a ScreenEmulator without wiring a full daemon (for
+// example, a downstream frontend applying a Replay snapshot).
+func NewEmulatorFactory(opts ...Option) client.EmulatorFactory {
+	cfg := defaultConfig()
+	for _, o := range opts {
+		o(cfg)
+	}
+	return &factory{cfg: cfg}
+}

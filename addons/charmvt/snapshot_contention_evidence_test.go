@@ -33,7 +33,7 @@ func TestRegression_SnapshotUnderContinuousWrites(t *testing.T) {
 	baseStart := time.Now()
 	baseline := em.Snapshot()
 	baseElapsed := time.Since(baseStart)
-	if baseline.Scrollback == nil {
+	if baseline.Replay == nil {
 		t.Fatal("precondition failed: scrollback must be populated")
 	}
 	t.Logf("Baseline Snapshot (no contention): %v", baseElapsed)
@@ -97,7 +97,7 @@ func TestRegression_SnapshotBaselineWithoutContention(t *testing.T) {
 	snap := em.Snapshot()
 	elapsed := time.Since(start)
 
-	if snap.Scrollback == nil {
+	if snap.Replay == nil {
 		t.Fatal("scrollback must not be nil")
 	}
 

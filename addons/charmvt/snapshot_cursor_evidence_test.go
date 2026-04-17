@@ -15,7 +15,7 @@ import (
 // at the bottom of the viewport instead of at the shell prompt. Typed text
 // appears in the wrong location, but Enter sends correctly.
 //
-// Root cause hypothesis: Snapshot().Viewport does not include a CUP (Cursor
+// Root cause hypothesis: Snapshot().Replay does not include a CUP (Cursor
 // Position) escape sequence, so xterm.js leaves the cursor wherever write()
 // ends — typically the last non-empty row, not the actual cursor position.
 
@@ -31,7 +31,7 @@ func TestEvidence_SnapshotViewportIncludesCursorPosition(t *testing.T) {
 	em.Process([]byte("$ cmd"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	// The viewport should contain the prompt text
 	require.Contains(t, vp, "$ cmd")
@@ -86,8 +86,8 @@ func TestEvidence_CursorPositionAvailableButUnused(t *testing.T) {
 	snap := em.Snapshot()
 
 	// The Snapshot struct only has Viewport and Scrollback — no cursor fields
-	_ = snap.Viewport
-	_ = snap.Scrollback
+	_ = snap.Replay
+	_ = snap.Replay
 	// There is no snap.CursorRow or snap.CursorCol — the position is lost
 }
 
@@ -112,7 +112,7 @@ func TestEvidence_CursorDesyncAfterMultilinePrompt(t *testing.T) {
 	assert.Positive(t, pos.X, "cursor should be past the prompt character")
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	// After xterm.js writes this viewport, cursor ends at end of last written
 	// char. With trimTrailingEmptyRows, that's the end of row 1 — which
@@ -144,7 +144,7 @@ func TestEvidence_CursorDesyncWithOutputBelowPrompt(t *testing.T) {
 	assert.Equal(t, 3, pos.X, "cursor should be at col 3 (after '$ x')")
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	// The viewport has 3 lines of content. After writing to xterm.js,
 	// the cursor is at the end of the LAST written text.
@@ -189,7 +189,7 @@ func TestEvidence_CursorDesyncPromptNotLastLine(t *testing.T) {
 	assert.Equal(t, 3, pos.X, "cursor should be at prompt col")
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 	lines := strings.Split(vp, "\r\n")
 
 	// The viewport has content on row 0, 1, and 4 (0-indexed)
@@ -225,7 +225,7 @@ func TestEvidence_ViewportShouldEndWithCUP(t *testing.T) {
 	expectedCUP := fmt.Sprintf("\x1b[%d;%dH", pos.Y+1, pos.X+1)
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	// This test will PASS once the fix is implemented.
 	// Currently it FAILS — documenting the expected behavior.

@@ -27,7 +27,7 @@ func TestE2E_ClaudeCodeOutputPattern(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.scrollback = 1000
 	em := newEmulator("claude-session", 120, 36, cfg)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Phase 1: Shell prompt before Claude starts.
 	em.Process([]byte("~/project ➜ claude\r\n"))
@@ -37,10 +37,10 @@ func TestE2E_ClaudeCodeOutputPattern(t *testing.T) {
 	em.Process([]byte("\x1b[6n")) // CPR: detect cursor position
 
 	// Phase 3: Enter alt screen, set up TUI.
-	em.Process([]byte("\x1b[?1049h"))          // enter alt screen
-	em.Process([]byte("\x1b[?25l"))            // hide cursor
-	em.Process([]byte("\x1b[H\x1b[2J"))        // clear screen
-	em.Process([]byte("\x1b[?2004h"))          // enable bracketed paste
+	em.Process([]byte("\x1b[?1049h"))   // enter alt screen
+	em.Process([]byte("\x1b[?25l"))     // hide cursor
+	em.Process([]byte("\x1b[H\x1b[2J")) // clear screen
+	em.Process([]byte("\x1b[?2004h"))   // enable bracketed paste
 
 	// Phase 4: Render Claude Code UI with box drawing and colors.
 	em.Process([]byte("\x1b[1;1H"))
@@ -64,7 +64,7 @@ func TestE2E_ClaudeCodeOutputPattern(t *testing.T) {
 
 	// Verify: snapshot should contain Claude Code UI elements.
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	assert.Contains(t, vp, "Claude Code v2.1.112", "missing Claude Code header")
 	assert.Contains(t, vp, "Hello! How can I help?", "missing greeting")
@@ -76,7 +76,7 @@ func TestE2E_ClaudeCodeOutputPattern(t *testing.T) {
 // alt screen + cursor positioning + mode queries.
 func TestE2E_VimLikeOutputPattern(t *testing.T) {
 	em := newEmulator("vim-session", 80, 24, defaultConfig())
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Vim startup sequence.
 	em.Process([]byte("\x1b[?1049h"))   // alt screen
@@ -94,7 +94,7 @@ func TestE2E_VimLikeOutputPattern(t *testing.T) {
 	em.Process([]byte("\x1b[6n")) // cursor position report
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 	assert.Contains(t, vp, "package main")
 	assert.Contains(t, vp, "INSERT")
 }
@@ -116,7 +116,7 @@ func TestE2E_FullLifecycle(t *testing.T) {
 
 	// Phase 3: Snapshot (must work after query).
 	snap1 := em.Snapshot()
-	assert.Contains(t, string(snap1.Viewport), "line 1")
+	assert.Contains(t, string(snap1.Replay), "line 1")
 
 	// Phase 4: More content pushing into scrollback.
 	for i := range 30 {
@@ -126,11 +126,11 @@ func TestE2E_FullLifecycle(t *testing.T) {
 	// Phase 5: Another query + snapshot.
 	em.Process([]byte("\x1b[6n"))
 	snap2 := em.Snapshot()
-	require.NotNil(t, snap2.Scrollback, "scrollback must be populated")
+	require.NotNil(t, snap2.Replay, "scrollback must be populated")
 
 	// Phase 6: Close.
 	err := em.Close()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// Phase 7: Post-close operations should not panic.
 	assert.NotPanics(t, func() {
@@ -161,7 +161,7 @@ func TestE2E_MultipleEmulatorInstances(t *testing.T) {
 			em.Process([]byte(fmt.Sprintf("more content %d\r\n", i)))
 
 			snap := em.Snapshot()
-			if !strings.Contains(string(snap.Viewport), fmt.Sprintf("content for session %d", i)) {
+			if !strings.Contains(string(snap.Replay), fmt.Sprintf("content for session %d", i)) {
 				t.Errorf("session %d: missing content in viewport", i)
 			}
 		}()
@@ -224,7 +224,7 @@ func TestE2E_AttachDetachCycle(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.scrollback = 500
 	em := newEmulator("attach-test", 100, 30, cfg)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Phase 1: Normal operation — TUI app sends content + queries.
 	em.Process([]byte("\x1b[?1049h\x1b[H\x1b[2J")) // alt screen + clear
@@ -248,7 +248,7 @@ func TestE2E_AttachDetachCycle(t *testing.T) {
 	snapshotDone := make(chan struct{})
 	go func() {
 		snap := em.Snapshot()
-		assert.NotEmpty(t, snap.Viewport, "viewport must not be empty on reattach")
+		assert.NotEmpty(t, snap.Replay, "viewport must not be empty on reattach")
 		close(snapshotDone)
 	}()
 
@@ -268,7 +268,7 @@ func TestE2E_SustainedOperationNoDegradation(t *testing.T) {
 	cfg := defaultConfig()
 	cfg.scrollback = 2000
 	em := newEmulator("sustained", 120, 40, cfg)
-	defer em.Close()
+	defer func() { _ = em.Close() }()
 
 	// Warm up.
 	for i := range 100 {
@@ -295,9 +295,9 @@ func TestE2E_SustainedOperationNoDegradation(t *testing.T) {
 
 	t.Logf("Baseline snapshot: %v, After 2000 lines + queries: %v", baseline, loaded)
 
-	require.NotNil(t, snap1.Viewport)
-	require.NotNil(t, snap2.Viewport)
-	require.NotNil(t, snap2.Scrollback, "scrollback should be populated after 2000 lines")
+	require.NotNil(t, snap1.Replay)
+	require.NotNil(t, snap2.Replay)
+	require.NotNil(t, snap2.Replay, "scrollback should be populated after 2000 lines")
 
 	// Snapshot time should not degrade dramatically (allow 10x for scrollback growth).
 	if loaded > baseline*10+50*time.Millisecond {
@@ -325,14 +325,14 @@ func TestE2E_FactoryCreatedEmulatorDrains(t *testing.T) {
 	select {
 	case <-done:
 		snap := em.Snapshot()
-		assert.Contains(t, string(snap.Viewport), "content after DA1")
+		assert.Contains(t, string(snap.Replay), "content after DA1")
 	case <-time.After(processTimeout):
 		t.Fatal("factory-created emulator blocked on DA1 — drain not working")
 	}
 
 	// Close via io.Closer interface (production path).
 	if closer, ok := em.(interface{ Close() error }); ok {
-		assert.NoError(t, closer.Close())
+		require.NoError(t, closer.Close())
 	}
 
 	f.Close()

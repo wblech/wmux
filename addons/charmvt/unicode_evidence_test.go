@@ -24,7 +24,7 @@ func TestViewport_NerdFont_GitBranch(t *testing.T) {
 	em.Process([]byte("branch: " + icon + " main"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	assert.Contains(t, vp, icon,
 		"viewport should contain Nerd Font git branch icon U+E0A0")
@@ -52,7 +52,7 @@ func TestViewport_NerdFont_DevIcons(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	for name, icon := range icons {
 		assert.Contains(t, vp, icon,
@@ -68,7 +68,7 @@ func TestViewport_Emoji(t *testing.T) {
 	em.Process([]byte("crab: 🦀 rocket: 🚀 check: ✅"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	assert.Contains(t, vp, "🦀", "viewport should contain crab emoji")
 	assert.Contains(t, vp, "🚀", "viewport should contain rocket emoji")
@@ -84,7 +84,7 @@ func TestViewport_MixedUnicode(t *testing.T) {
 	em.Process([]byte(prompt))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	assert.Contains(t, vp, "\uE0A0", "viewport should contain git branch icon")
 	assert.Contains(t, vp, "\uF07B", "viewport should contain folder icon")
@@ -110,8 +110,8 @@ func TestScrollback_NerdFont_GitBranch(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback, "scrollback should not be nil after overflow")
-	sb := string(snap.Scrollback)
+	require.NotNil(t, snap.Replay, "scrollback should not be nil after overflow")
+	sb := string(snap.Replay)
 
 	assert.Contains(t, sb, icon,
 		"scrollback should contain Nerd Font git branch icon U+E0A0")
@@ -140,8 +140,8 @@ func TestScrollback_NerdFont_DevIcons(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback)
-	sb := string(snap.Scrollback)
+	require.NotNil(t, snap.Replay)
+	sb := string(snap.Replay)
 
 	for name, icon := range icons {
 		assert.Contains(t, sb, icon,
@@ -160,8 +160,8 @@ func TestScrollback_Emoji(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback)
-	sb := string(snap.Scrollback)
+	require.NotNil(t, snap.Replay)
+	sb := string(snap.Replay)
 
 	assert.Contains(t, sb, "🦀", "scrollback should contain crab emoji")
 	assert.Contains(t, sb, "🚀", "scrollback should contain rocket emoji")
@@ -179,8 +179,8 @@ func TestScrollback_MixedUnicode(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback)
-	sb := string(snap.Scrollback)
+	require.NotNil(t, snap.Replay)
+	sb := string(snap.Replay)
 
 	assert.Contains(t, sb, "\uE0A0", "scrollback should contain git branch icon")
 	assert.Contains(t, sb, "\uF07B", "scrollback should contain folder icon")
@@ -199,7 +199,7 @@ func TestViewport_NerdFont_ByteLevel(t *testing.T) {
 	em.Process([]byte("X" + icon + "Y"))
 
 	snap := em.Snapshot()
-	vp := snap.Viewport
+	vp := snap.Replay
 
 	// Find "X" in the viewport bytes
 	xIdx := -1
@@ -235,8 +235,8 @@ func TestScrollback_NerdFont_ByteLevel(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback)
-	sb := snap.Scrollback
+	require.NotNil(t, snap.Replay)
+	sb := snap.Replay
 
 	// Find "X" in the scrollback bytes
 	xIdx := -1
@@ -269,7 +269,7 @@ func TestViewport_WideChar_NoExtraSpaces(t *testing.T) {
 	em.Process([]byte("A\uE0A0B"))
 
 	snap := em.Snapshot()
-	vp := string(snap.Viewport)
+	vp := string(snap.Replay)
 
 	// The viewport should contain A, the icon, and B without extra spaces between them.
 	// If placeholder cells leak as spaces, we'd see "A B" instead of "A\uE0A0B".
@@ -301,8 +301,8 @@ func TestScrollback_WideChar_NoExtraSpaces(t *testing.T) {
 	}
 
 	snap := em.Snapshot()
-	require.NotNil(t, snap.Scrollback)
-	sb := string(snap.Scrollback)
+	require.NotNil(t, snap.Replay)
+	sb := string(snap.Replay)
 
 	idx := strings.Index(sb, "A")
 	require.NotEqual(t, -1, idx)

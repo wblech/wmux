@@ -23,7 +23,7 @@ type config struct {
 }
 
 func defaultConfig() *config {
-	return &config{scrollback: 10000}
+	return &config{scrollback: 10000, callbacks: nil, logger: nil}
 }
 
 // WithScrollbackSize sets the scrollback buffer size in lines. Default: 10000.

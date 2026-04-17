@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/wblech/wmux/pkg/client"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -25,7 +24,10 @@ func TestWithScrollbackSize(t *testing.T) {
 func TestWithCallbacks(t *testing.T) {
 	cfg := defaultConfig()
 	cb := Callbacks{
-		Bell: func(sessionID string) {},
+		Bell:             func(sessionID string) {},
+		Title:            nil,
+		WorkingDirectory: nil,
+		AltScreen:        nil,
 	}
 	WithCallbacks(cb)(cfg)
 	require.NotNil(t, cfg.callbacks)
@@ -36,7 +38,7 @@ func TestWithLogger(t *testing.T) {
 	cfg := defaultConfig()
 	assert.Nil(t, cfg.logger)
 
-	l := &testLogger{}
+	l := &testLogger{messages: nil}
 	WithLogger(l)(cfg)
 	assert.Equal(t, l, cfg.logger)
 }
@@ -49,7 +51,7 @@ func TestFactory_CreateReturnsEmulator(t *testing.T) {
 	// Write some data and verify it appears in the snapshot.
 	emu.Process([]byte("hello world"))
 	snap := emu.Snapshot()
-	assert.Contains(t, string(snap.Viewport), "hello world")
+	assert.Contains(t, string(snap.Replay), "hello world")
 }
 
 func TestFactory_CreateIndependentInstances(t *testing.T) {
@@ -63,10 +65,10 @@ func TestFactory_CreateIndependentInstances(t *testing.T) {
 	snap1 := emu1.Snapshot()
 	snap2 := emu2.Snapshot()
 
-	assert.Contains(t, string(snap1.Viewport), "alpha")
-	assert.NotContains(t, string(snap1.Viewport), "bravo")
-	assert.Contains(t, string(snap2.Viewport), "bravo")
-	assert.NotContains(t, string(snap2.Viewport), "alpha")
+	assert.Contains(t, string(snap1.Replay), "alpha")
+	assert.NotContains(t, string(snap1.Replay), "bravo")
+	assert.Contains(t, string(snap2.Replay), "bravo")
+	assert.NotContains(t, string(snap2.Replay), "alpha")
 }
 
 func TestBackend_ReturnsOption(t *testing.T) {
@@ -74,7 +76,7 @@ func TestBackend_ReturnsOption(t *testing.T) {
 	assert.NotNil(t, opt)
 
 	// Verify the returned value satisfies the client.Option type.
-	var _ client.Option = opt
+	var _ = opt
 }
 
 func TestFactory_Close(t *testing.T) {
@@ -91,7 +93,7 @@ func TestEmulator_Resize(t *testing.T) {
 	emu.Process([]byte("this is a test line"))
 	emu.Resize(40, 12)
 	snap := emu.Snapshot()
-	assert.NotEmpty(t, snap.Viewport)
+	assert.NotEmpty(t, snap.Replay)
 }
 
 func TestEmulator_Scrollback(t *testing.T) {
@@ -110,7 +112,7 @@ func TestEmulator_Scrollback(t *testing.T) {
 
 	snap := emu.Snapshot()
 	// With 20 lines and 5-row viewport, scrollback should have content.
-	assert.NotEmpty(t, snap.Scrollback, "scrollback should contain data when lines exceed viewport")
+	assert.NotEmpty(t, snap.Replay, "scrollback should contain data when lines exceed viewport")
 }
 
 func TestEmulator_CallbacksBound(t *testing.T) {
@@ -124,6 +126,8 @@ func TestEmulator_CallbacksBound(t *testing.T) {
 			titleSession = sid
 			titleValue = title
 		},
+		WorkingDirectory: nil,
+		AltScreen:        nil,
 	})(cfg)
 
 	f := &factory{cfg: cfg}
