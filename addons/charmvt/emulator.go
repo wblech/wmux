@@ -10,6 +10,10 @@ import (
 	"github.com/wblech/wmux/pkg/client"
 )
 
+// ed2Seq is the byte sequence for ED2 (Erase Display 2), which clears the
+// viewport and pushes its contents into scrollback.
+var ed2Seq = []byte("\x1b[2J")
+
 // emulator wraps charmbracelet/x/vt as a client.ScreenEmulator.
 //
 // The vt.Emulator uses an internal io.Pipe for terminal responses (DA1, DA2,
@@ -17,9 +21,11 @@ import (
 // synchronous. A background goroutine drains the pipe to prevent this.
 // See: decisions/0025-drain-emulator-response-pipe.md
 type emulator struct {
-	mu   sync.Mutex
-	term *vt.Emulator
-	cols int
+	mu                 sync.Mutex
+	term               *vt.Emulator
+	cols               int
+	scrollbackMode     SnapshotScrollbackMode
+	scrollbackBaseline int
 }
 
 func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
@@ -80,7 +86,12 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 	// introduced by this package.
 	go drainResponsePipe(term)
 
-	return &emulator{mu: sync.Mutex{}, term: term, cols: cols}
+	return &emulator{
+		mu:             sync.Mutex{},
+		term:           term,
+		cols:           cols,
+		scrollbackMode: cfg.scrollbackMode,
+	}
 }
 
 // drainResponsePipe reads and discards all data from the emulator's response
@@ -100,6 +111,11 @@ func (e *emulator) Process(data []byte) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	_, _ = e.term.Write(data)
+	if e.scrollbackMode == SnapshotScrollbackSinceLastClear {
+		if bytes.Contains(data, ed2Seq) && !e.term.IsAltScreen() {
+			e.scrollbackBaseline = e.term.ScrollbackLen()
+		}
+	}
 }
 
 // Snapshot returns the current terminal state as a self-contained replay
@@ -111,7 +127,12 @@ func (e *emulator) Snapshot() client.Snapshot {
 	var buf bytes.Buffer
 	buf.WriteString("\x1b[2J\x1b[H\x1b[3J")
 
-	if sb := renderScrollbackFrom(e.term, e.cols, 0); sb != nil {
+	from := 0
+	if e.scrollbackMode == SnapshotScrollbackSinceLastClear {
+		from = min(e.scrollbackBaseline, e.term.ScrollbackLen())
+	}
+
+	if sb := renderScrollbackFrom(e.term, e.cols, from); sb != nil {
 		buf.Write(sb)
 	}
 

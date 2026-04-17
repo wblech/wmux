@@ -41,6 +41,13 @@ func fillLines(em *emulator, prefix string, n int) {
 	}
 }
 
+func newSinceLastClearEmulator(id string, cols, rows int, scrollback int) *emulator {
+	cfg := defaultConfig()
+	cfg.scrollback = scrollback
+	cfg.scrollbackMode = SnapshotScrollbackSinceLastClear
+	return newEmulator(id, cols, rows, cfg)
+}
+
 // ---------------------------------------------------------------------------
 // EC1: Pure shell — no ED2 ever. All scrollback is natural.
 //
@@ -97,17 +104,12 @@ func TestWatermark_EC2_PureTUI_NoDuplication(t *testing.T) {
 // ---------------------------------------------------------------------------
 // EC3: Shell → TUI. Natural scrollback from shell, then TUI does ED2.
 //
-// Expected: shell scrollback preserved, TUI ED2 junk excluded.
+// SinceLastClear mode: pre-ED2 shell output excluded, TUI viewport preserved.
 // ---------------------------------------------------------------------------
-func TestWatermark_EC3_ShellThenTUI_ShellScrollbackPreserved(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.scrollback = 1000
-	em := newEmulator("ec3", 80, 5, cfg)
+func TestWatermark_EC3_ShellThenTUI_StaleScrollbackExcluded(t *testing.T) {
+	em := newSinceLastClearEmulator("ec3", 80, 5, 1000)
 
-	// Shell phase: enough output to push lines into scrollback.
 	fillLines(em, "CMD", 20)
-
-	// TUI starts: ED2 + banner.
 	em.Process([]byte("\x1b[2J\x1b[H"))
 	em.Process([]byte("APP-BANNER\r\n"))
 	em.Process([]byte("APP-UI\r\n"))
@@ -115,16 +117,13 @@ func TestWatermark_EC3_ShellThenTUI_ShellScrollbackPreserved(t *testing.T) {
 	snap := em.Snapshot()
 	replay := string(snap.Replay)
 
-	// Shell scrollback must be preserved.
-	assert.Contains(t, replay, "CMD-000", "early shell output must survive in scrollback")
-	assert.Contains(t, replay, "CMD-010", "mid shell output must survive in scrollback")
-
-	// TUI viewport must be present.
+	assert.NotContains(t, replay, "CMD-000",
+		"pre-TUI shell output must not appear in snapshot after ED2")
+	assert.NotContains(t, replay, "CMD-010",
+		"pre-TUI shell mid-range must not appear in snapshot after ED2")
 	assert.Contains(t, replay, "APP-BANNER", "TUI banner must be in viewport")
-
-	// TUI content must appear only ONCE (not also in scrollback via ED2 push).
 	assert.Equal(t, 1, countInReplay(snap.Replay, "APP-BANNER"),
-		"TUI banner must not be duplicated from ED2 push")
+		"TUI banner must appear exactly once")
 }
 
 // ---------------------------------------------------------------------------
@@ -281,31 +280,20 @@ func TestWatermark_EC7_MixedChunk_ED2AndContentInOneCall(t *testing.T) {
 // ---------------------------------------------------------------------------
 // EC8: Shell `clear` command → ED2 → more shell output.
 //
-// `clear` typically sends ED2. The user then runs more commands.
-// Post-clear shell output must be preserved in scrollback.
+// SinceLastClear mode: pre-clear output excluded, post-clear output preserved.
 // ---------------------------------------------------------------------------
 func TestWatermark_EC8_ShellClear_PostClearOutputPreserved(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.scrollback = 1000
-	em := newEmulator("ec8", 80, 5, cfg)
+	em := newSinceLastClearEmulator("ec8", 80, 5, 1000)
 
-	// Shell work before clear.
 	fillLines(em, "OLD", 10)
-
-	// User runs `clear` → sends ED2.
 	em.Process([]byte("\x1b[2J\x1b[H"))
-
-	// Shell work after clear.
 	fillLines(em, "NEW", 20)
 
 	snap := em.Snapshot()
 	replay := string(snap.Replay)
 
-	// Pre-clear scrollback: ideally preserved (it was natural scroll-off).
-	assert.Contains(t, replay, "OLD-000",
-		"pre-clear shell scrollback should be preserved")
-
-	// Post-clear scrollback: MUST be preserved.
+	assert.NotContains(t, replay, "OLD-000",
+		"pre-clear shell scrollback must be excluded after ED2")
 	assert.Contains(t, replay, "NEW-000",
 		"post-clear shell output must be in scrollback")
 	assert.Contains(t, replay, "NEW-010",
@@ -452,31 +440,21 @@ func TestWatermark_EC13_SnapshotIdempotencyAfterED2(t *testing.T) {
 // EC14: Resize between snapshots — SIGWINCH triggers Resize(), which may
 // cause a TUI to redraw with ED2.
 //
-// Resize itself must not corrupt watermark tracking.
+// SinceLastClear mode: pre-resize+ED2 scrollback excluded, TUI UI preserved.
 // ---------------------------------------------------------------------------
 func TestWatermark_EC14_ResizeBetweenSnapshots(t *testing.T) {
-	cfg := defaultConfig()
-	cfg.scrollback = 1000
-	em := newEmulator("ec14", 80, 5, cfg)
+	em := newSinceLastClearEmulator("ec14", 80, 5, 1000)
 
-	// Shell work.
 	fillLines(em, "PRE-RESIZE", 15)
-
-	// Resize (simulates SIGWINCH).
 	em.Resize(120, 10)
-
-	// TUI redraws on resize.
 	em.Process([]byte("\x1b[2J\x1b[H"))
 	em.Process([]byte("RESIZED-UI\r\n"))
 
 	snap := em.Snapshot()
 	replay := string(snap.Replay)
 
-	// Pre-resize shell scrollback preserved.
-	assert.Contains(t, replay, "PRE-RESIZE-000",
-		"shell scrollback from before resize must survive")
-
-	// TUI content appears once.
+	assert.NotContains(t, replay, "PRE-RESIZE-000",
+		"shell scrollback from before resize+ED2 must be excluded")
 	assert.Equal(t, 1, countInReplay(snap.Replay, "RESIZED-UI"),
 		"resized TUI content must appear exactly once")
 }
@@ -776,4 +754,49 @@ func TestWatermark_EC22_OnlyED2TriggersWatermark(t *testing.T) {
 	// All natural content should be preserved (ED0 doesn't push to scrollback).
 	assert.Contains(t, replay, "NATURAL-000", "ED0 must not affect scrollback tracking")
 	assert.Contains(t, replay, "EXTRA-000", "content after ED0 must be preserved")
+}
+
+// ---------------------------------------------------------------------------
+// EC23: All mode (default) — pre-TUI scrollback preserved even after ED2.
+// ---------------------------------------------------------------------------
+func TestWatermark_EC23_AllMode_PreservesEverything(t *testing.T) {
+	cfg := defaultConfig()
+	cfg.scrollback = 1000
+	em := newEmulator("ec23", 80, 5, cfg)
+
+	fillLines(em, "SHELL", 20)
+	em.Process([]byte("\x1b[2J\x1b[H"))
+	em.Process([]byte("TUI-BANNER\r\n"))
+
+	snap := em.Snapshot()
+	replay := string(snap.Replay)
+
+	assert.Contains(t, replay, "SHELL-000",
+		"All mode must preserve pre-TUI scrollback")
+	assert.Contains(t, replay, "SHELL-010",
+		"All mode must preserve pre-TUI scrollback mid-range")
+	assert.Contains(t, replay, "TUI-BANNER",
+		"All mode must include TUI viewport")
+}
+
+// ---------------------------------------------------------------------------
+// EC24: SinceLastClear mode — ED2 on alt-screen must NOT update the baseline.
+// ---------------------------------------------------------------------------
+func TestWatermark_EC24_SinceLastClear_AltScreenIgnored(t *testing.T) {
+	em := newSinceLastClearEmulator("ec24", 80, 5, 1000)
+
+	fillLines(em, "MAIN", 15)
+
+	em.Process([]byte("\x1b[?1049h"))
+	em.Process([]byte("\x1b[2J\x1b[H"))
+	em.Process([]byte("VIM\r\n"))
+	em.Process([]byte("\x1b[?1049l"))
+
+	snap := em.Snapshot()
+	replay := string(snap.Replay)
+
+	assert.Contains(t, replay, "MAIN-000",
+		"main-screen scrollback must survive alt-screen ED2 in SinceLastClear mode")
+	assert.Contains(t, replay, "MAIN-010",
+		"main-screen scrollback mid-range must survive")
 }
