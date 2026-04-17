@@ -2,6 +2,23 @@
 
 All notable changes to the charmvt addon are documented in this file.
 
+## [0.2.0](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.2.0) - 2026-04-17
+
+### Documentation
+
+- Add 0027 superseding 0010 — charmvt sole emulator *(adr)*
+- Add 0026 superseding 0013 — unified Replay snapshot *(adr)*
+- Remove xterm addon references and document Replay snapshot API
+
+### Features
+
+- Emit self-contained Replay snapshot *(charmvt)*
+
+### Refactoring
+
+- Remove addonManager field and WithAddonManager option *(session)*
+- Unify Snapshot to single Replay []byte field
+
 ## [0.1.0-beta.5](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.1.0-beta.5) - 2026-04-17
 
 ### Bug Fixes
