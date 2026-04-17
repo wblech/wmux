@@ -140,6 +140,27 @@ d, err := client.NewDaemon(
 )
 ```
 
+### Snapshot scrollback filtering
+
+By default, `Snapshot()` includes the entire scrollback buffer. For applications
+where a TUI (e.g., Claude Code) takes over the screen, pre-TUI shell content
+can appear above the TUI banner on reconnect. Use `SinceLastClear` mode to
+exclude scrollback from before the last screen clear:
+
+```go
+d, err := client.NewDaemon(
+    charmvt.Backend(
+        charmvt.WithSnapshotScrollbackMode(charmvt.SnapshotScrollbackSinceLastClear),
+    ),
+)
+```
+
+In this mode, the emulator tracks the scrollback length at each ED2
+(`\x1b[2J`) on the main screen. `Snapshot()` renders only scrollback lines
+added after that point. Shell output, TUI output that scrolled off after the
+last clear, and viewport content are all included. Pre-clear content is
+excluded. See [ADR 0028](../../decisions/0028-ed2-scrollback-behavior.md).
+
 ### Runtime scrollback configuration
 
 The scrollback buffer size can be changed on a live session without restarting
