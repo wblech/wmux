@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 date: 2026-04-13
 decision-makers: wblech
+superseded-by: 0027
 ---
 
 # Emulator Addon as External Process with Binary Protocol
@@ -32,3 +33,7 @@ Chosen option: "External process with binary protocol", because it keeps the dae
 * Good, because binary protocol matches the daemon's existing wire format style
 * Good, because addons can be written in any language
 * Bad, because IPC adds latency vs in-process calls (mitigated by fire-and-forget for process, only snapshot is synchronous)
+
+## Superseded by 0027
+
+xterm addon removed; charmvt is the sole maintained backend.
