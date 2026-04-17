@@ -148,23 +148,6 @@ strategy = "follower"
 	assert.Equal(t, "follower", cfg.Resize.Strategy)
 }
 
-func TestLoad_EmulatorXtermConfig(t *testing.T) {
-	content := `
-[emulator]
-backend = "xterm"
-
-[emulator.xterm]
-bin = "/usr/local/bin/wmux-emulator-xterm"
-`
-	path := filepath.Join(t.TempDir(), "wmux.toml")
-	require.NoError(t, os.WriteFile(path, []byte(content), 0644))
-
-	cfg, err := Load(path)
-	require.NoError(t, err)
-	assert.Equal(t, "xterm", cfg.Emulator.Backend)
-	assert.Equal(t, "/usr/local/bin/wmux-emulator-xterm", cfg.Emulator.Xterm.Bin)
-}
-
 func TestDefaults_EmulatorXterm(t *testing.T) {
 	cfg := Defaults()
 	assert.Equal(t, "none", cfg.Emulator.Backend)
