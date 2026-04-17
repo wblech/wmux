@@ -168,6 +168,21 @@ type ScreenEmulator interface {
     Snapshot() Snapshot
     Resize(cols, rows int)
 }
+
+// Snapshot is the warm-attach payload. Replay is a self-contained VT byte
+// stream: when written to an xterm.js-compatible terminal it reproduces the
+// source screen and cursor exactly, regardless of prior destination state.
+//
+// Implementations should build Replay as:
+//   1. \e[2J\e[H\e[3J  — clear viewport + scrollback, home the cursor.
+//   2. The serialized scrollback history.
+//   3. The serialized current viewport.
+//   4. A final CUP (\e[row;colH) restoring the source cursor position.
+//
+// See ADR 0026 for the full contract.
+type Snapshot struct {
+    Replay []byte
+}
 ```
 
 Pass it via `client.WithEmulatorFactory(yourFactory)`.
