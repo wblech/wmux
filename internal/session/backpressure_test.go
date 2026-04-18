@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuffer_WriteAndRead(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 	n, err := buf.Write([]byte("hello"))
 	require.NoError(t, err)
 	assert.Equal(t, 5, n)
@@ -18,7 +18,7 @@ func TestBuffer_WriteAndRead(t *testing.T) {
 }
 
 func TestBuffer_ReadDrains(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 	_, err := buf.Write([]byte("data"))
 	require.NoError(t, err)
 
@@ -30,7 +30,7 @@ func TestBuffer_ReadDrains(t *testing.T) {
 }
 
 func TestBuffer_HighWatermarkPause(t *testing.T) {
-	buf := newBuffer(10, 5)
+	buf := newBuffer(10, 5, nil, "")
 	assert.False(t, buf.Paused())
 
 	_, err := buf.Write([]byte("0123456789")) // exactly 10 bytes == high watermark
@@ -39,7 +39,7 @@ func TestBuffer_HighWatermarkPause(t *testing.T) {
 }
 
 func TestBuffer_LowWatermarkResume(t *testing.T) {
-	buf := newBuffer(10, 5)
+	buf := newBuffer(10, 5, nil, "")
 	_, err := buf.Write([]byte("0123456789")) // trigger pause
 	require.NoError(t, err)
 	assert.True(t, buf.Paused())
@@ -49,7 +49,7 @@ func TestBuffer_LowWatermarkResume(t *testing.T) {
 }
 
 func TestBuffer_PartialDrainStaysPaused(t *testing.T) {
-	buf := newBuffer(10, 5)
+	buf := newBuffer(10, 5, nil, "")
 	_, err := buf.Write([]byte("0123456789")) // 10 bytes -> paused
 	require.NoError(t, err)
 	assert.True(t, buf.Paused())
@@ -60,7 +60,7 @@ func TestBuffer_PartialDrainStaysPaused(t *testing.T) {
 }
 
 func TestBuffer_DrainBelowLowResumes(t *testing.T) {
-	buf := newBuffer(10, 5)
+	buf := newBuffer(10, 5, nil, "")
 	_, err := buf.Write([]byte("0123456789")) // 10 bytes -> paused
 	require.NoError(t, err)
 	assert.True(t, buf.Paused())
@@ -71,7 +71,7 @@ func TestBuffer_DrainBelowLowResumes(t *testing.T) {
 }
 
 func TestBuffer_MultipleWrites(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 	_, err := buf.Write([]byte("foo"))
 	require.NoError(t, err)
 	_, err = buf.Write([]byte("bar"))
@@ -84,7 +84,7 @@ func TestBuffer_MultipleWrites(t *testing.T) {
 }
 
 func TestBuffer_ReadN_ExactLength(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 	_, err := buf.Write([]byte("hello"))
 	require.NoError(t, err)
 
@@ -95,7 +95,7 @@ func TestBuffer_ReadN_ExactLength(t *testing.T) {
 }
 
 func TestBuffer_ReadN_GreaterThanLength(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 	_, err := buf.Write([]byte("hi"))
 	require.NoError(t, err)
 
@@ -106,7 +106,7 @@ func TestBuffer_ReadN_GreaterThanLength(t *testing.T) {
 }
 
 func TestBuffer_ReadN_Empty(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 
 	// ReadN on empty buffer returns nil.
 	out := buf.ReadN(10)
@@ -114,7 +114,7 @@ func TestBuffer_ReadN_Empty(t *testing.T) {
 }
 
 func TestBuffer_Len(t *testing.T) {
-	buf := newBuffer(100, 50)
+	buf := newBuffer(100, 50, nil, "")
 	assert.Equal(t, 0, buf.Len())
 
 	_, err := buf.Write([]byte("hello"))

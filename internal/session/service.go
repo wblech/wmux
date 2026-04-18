@@ -1,6 +1,8 @@
 package session
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"maps"
@@ -186,7 +188,7 @@ func (s *Service) Create(id string, opts CreateOptions) (Session, error) {
 		return Session{}, fmt.Errorf("spawn pty: %w", err)
 	}
 
-	buf := newBuffer(highWM, lowWM)
+	buf := newBuffer(highWM, lowWM, s.tracer, id)
 	batcher := newBatcher(batchInterval, func(data []byte) {
 		buf.Write(data) //nolint:errcheck
 	})
@@ -504,14 +506,35 @@ func (s *Service) readLoop(ms *managedSession) {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
+
+			if s.tracer.Enabled() {
+				s.tracer.Emit(chunkEvent(s.tracer, ms.session.ID, debug.StagePtyRead, chunk))
+			}
+
 			ms.batcher.Add(chunk)
 
 			select {
 			case emulatorCh <- chunk:
+				if s.tracer.Enabled() {
+					s.tracer.Emit(debug.Event{
+						SessionID: ms.session.ID,
+						Stage:     debug.StageEmulatorIn,
+						Seq:       -1,
+						ByteLen:   len(chunk),
+					})
+				}
 			default:
 				// Channel full — skip emulator for this chunk.
 				// Broadcast (batcher) already has the data; only snapshot
 				// accuracy is degraded, which self-heals on the next chunk.
+				if s.tracer.Enabled() {
+					s.tracer.Emit(debug.Event{
+						SessionID: ms.session.ID,
+						Stage:     debug.StageEmulatorDrop,
+						Seq:       -1,
+						ByteLen:   len(chunk),
+					})
+				}
 			}
 
 			if ms.historyWriter != nil {
@@ -539,6 +562,15 @@ func (s *Service) emulatorLoop(ms *managedSession, ch <-chan []byte) {
 				}
 			}()
 			ms.emulator.Process(chunk)
+
+			if s.tracer.Enabled() {
+				s.tracer.Emit(debug.Event{
+					SessionID: ms.session.ID,
+					Stage:     debug.StageEmulatorOut,
+					Seq:       -1,
+					ByteLen:   len(chunk),
+				})
+			}
 		}()
 	}
 }
@@ -556,6 +588,16 @@ func (s *Service) waitLoop(ms *managedSession) {
 	delete(s.sessions, ms.session.ID)
 	onExit := s.onExit
 	s.mu.Unlock()
+
+	if s.tracer.Enabled() {
+		s.tracer.Emit(debug.Event{
+			SessionID: ms.session.ID,
+			Stage:     debug.StageSessionClose,
+			Seq:       -1,
+			ExitCode:  exitCode,
+		})
+		s.tracer.ResetSeq(ms.session.ID)
+	}
 
 	ms.batcher.Stop()
 	ms.closeOnce.Do(func() {
@@ -575,4 +617,33 @@ func (s *Service) waitLoop(ms *managedSession) {
 	if onExit != nil {
 		onExit(ms.session.ID, exitCode)
 	}
+}
+
+// chunkEvent builds an Event with chunk-level fields populated according
+// to the tracer's configured level.
+func chunkEvent(t *debug.Tracer, sessionID string, stage debug.Stage, data []byte) debug.Event {
+	ev := debug.Event{
+		SessionID: sessionID,
+		Stage:     stage,
+		Seq:       t.NextSeq(sessionID),
+		ByteLen:   len(data),
+	}
+
+	if t.Level() >= debug.LevelChunk {
+		h := sha1.Sum(data)
+		ev.Sha1 = hex.EncodeToString(h[:])[:8]
+
+		if len(data) <= 64 {
+			ev.HeadHex = hex.EncodeToString(data)
+		} else {
+			ev.HeadHex = hex.EncodeToString(data[:64])
+			ev.TailHex = hex.EncodeToString(data[len(data)-64:])
+		}
+	}
+
+	if t.Level() >= debug.LevelFull {
+		ev.FullHex = hex.EncodeToString(data)
+	}
+
+	return ev
 }
