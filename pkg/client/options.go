@@ -17,6 +17,10 @@ type config struct {
 	autoStart         bool
 	rpcTimeout        time.Duration
 	emulatorFactory   EmulatorFactory
+	debugLogPath      string
+	debugLevel        int
+	debugMaxSize      int
+	debugMaxFiles     int
 }
 
 // newConfig creates a config with defaults and applies the given options.
@@ -90,4 +94,27 @@ func WithEmulatorFactory(f EmulatorFactory) Option {
 // ErrRequestTimeout. Default is 10 seconds.
 func WithRPCTimeout(d time.Duration) Option {
 	return func(c *config) { c.rpcTimeout = d }
+}
+
+// WithDebugLog activates debug tracing, writing JSON Lines to the given path.
+func WithDebugLog(path string) Option {
+	return func(c *config) { c.debugLogPath = path }
+}
+
+// WithDebugLevel sets the debug trace verbosity (0-3).
+// Values outside [0,3] are clamped. Default: 2 (Chunk) when debug is active.
+func WithDebugLevel(level int) Option {
+	return func(c *config) { c.debugLevel = level }
+}
+
+// WithDebugMaxSize sets the maximum debug log file size in megabytes before rotation.
+// Default: 50 MB.
+func WithDebugMaxSize(mb int) Option {
+	return func(c *config) { c.debugMaxSize = mb }
+}
+
+// WithDebugMaxFiles sets the maximum number of rotated debug log files to retain.
+// Default: 7.
+func WithDebugMaxFiles(n int) Option {
+	return func(c *config) { c.debugMaxFiles = n }
 }

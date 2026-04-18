@@ -9,6 +9,7 @@ import (
 
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/auth"
+	"github.com/wblech/wmux/internal/platform/debug"
 	"github.com/wblech/wmux/internal/platform/event"
 	"github.com/wblech/wmux/internal/platform/ipc"
 	"github.com/wblech/wmux/internal/platform/pty"
@@ -62,12 +63,32 @@ func (d *Daemon) Serve(ctx context.Context) error {
 	server := transport.NewServer(listener, token)
 	spawner := &pty.UnixSpawner{}
 
+	// Create debug tracer if configured (programmatic options or env vars).
+	var tracer *debug.Tracer
+	debugCfg := d.resolveDebugConfig()
+	if debugCfg.Enabled {
+		var tracerOpts []debug.TracerOption
+		if debugCfg.MaxSizeMB > 0 {
+			tracerOpts = append(tracerOpts, debug.WithMaxSize(debugCfg.MaxSizeMB))
+		}
+		if debugCfg.MaxFiles > 0 {
+			tracerOpts = append(tracerOpts, debug.WithMaxFiles(debugCfg.MaxFiles))
+		}
+		var tracerErr error
+		tracer, tracerErr = debug.NewTracer(debugCfg.Path, debugCfg.Level, tracerOpts...)
+		if tracerErr != nil {
+			return fmt.Errorf("client: create debug tracer: %w", tracerErr)
+		}
+		defer tracer.Close()
+	}
+
 	var sessionOpts []session.Option
 	if d.cfg.emulatorFactory != nil {
 		sessionOpts = append(sessionOpts, session.WithEmulatorFactory(
 			&emulatorFactoryAdapter{f: d.cfg.emulatorFactory},
 		))
 	}
+	sessionOpts = append(sessionOpts, session.WithTracer(tracer))
 	sessionSvc := session.NewService(spawner, sessionOpts...)
 
 	pidFile := filepath.Join(filepath.Dir(d.cfg.socket), "wmux.pid")
@@ -81,6 +102,7 @@ func (d *Daemon) Serve(ctx context.Context) error {
 		daemon.WithEventBus(d.eventBus),
 		daemon.WithColdRestore(d.cfg.coldRestore),
 		daemon.WithMaxScrollbackSize(d.cfg.maxScrollbackSize),
+		daemon.WithTracer(tracer),
 	)
 
 	if err := dd.Start(ctx); err != nil {
@@ -88,6 +110,52 @@ func (d *Daemon) Serve(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// resolveDebugConfig merges programmatic options with env var fallbacks.
+// Programmatic options take precedence.
+func (d *Daemon) resolveDebugConfig() debug.EnvConfig {
+	env := debug.ReadEnv()
+
+	cfg := debug.EnvConfig{
+		MaxSizeMB: 50,
+		MaxFiles:  7,
+	}
+
+	// Programmatic options take precedence.
+	if d.cfg.debugLogPath != "" {
+		cfg.Enabled = true
+		cfg.Path = d.cfg.debugLogPath
+		cfg.Level = debug.LevelChunk
+	} else if env.Enabled {
+		cfg.Enabled = true
+		cfg.Path = env.Path
+		cfg.Level = env.Level
+	}
+
+	if !cfg.Enabled {
+		return cfg
+	}
+
+	if d.cfg.debugLevel > 0 {
+		cfg.Level = debug.ClampLevel(d.cfg.debugLevel)
+	} else if env.Level > debug.LevelOff {
+		cfg.Level = env.Level
+	}
+
+	if d.cfg.debugMaxSize > 0 {
+		cfg.MaxSizeMB = d.cfg.debugMaxSize
+	} else if env.MaxSizeMB > 0 {
+		cfg.MaxSizeMB = env.MaxSizeMB
+	}
+
+	if d.cfg.debugMaxFiles > 0 {
+		cfg.MaxFiles = d.cfg.debugMaxFiles
+	} else if env.MaxFiles > 0 {
+		cfg.MaxFiles = env.MaxFiles
+	}
+
+	return cfg
 }
 
 const daemonSentinel = "__wmux_daemon__"
