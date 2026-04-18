@@ -381,6 +381,16 @@ func (d *Daemon) handleCreate(c ConnectedClient, frame protocol.Frame) {
 		SessionID: req.ID,
 		Payload:   map[string]any{"shell": req.Shell, "pid": info.Pid},
 	})
+
+	if d.tracer.Enabled() {
+		d.tracer.Emit(debug.Event{
+			SessionID: req.ID,
+			Stage:     debug.StageSessionCreate,
+			Seq:       -1,
+			Cols:      req.Cols,
+			Rows:      req.Rows,
+		})
+	}
 }
 
 // handleList processes a MsgList frame.
@@ -449,6 +459,16 @@ func (d *Daemon) handleResize(c ConnectedClient, frame protocol.Frame) {
 		return
 	}
 
+	if d.tracer.Enabled() {
+		d.tracer.Emit(debug.Event{
+			SessionID: req.SessionID,
+			Stage:     debug.StageResize,
+			Seq:       -1,
+			Cols:      req.Cols,
+			Rows:      req.Rows,
+		})
+	}
+
 	_ = c.Control().WriteFrame(okFrame(nil))
 }
 
@@ -506,7 +526,34 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 		Snapshot: nil,
 	}
 
+	if d.tracer.Enabled() {
+		d.tracer.Emit(debug.Event{
+			SessionID: req.SessionID,
+			Stage:     debug.StageAttach,
+			Seq:       -1,
+		})
+		d.tracer.Emit(debug.Event{
+			SessionID: req.SessionID,
+			Stage:     debug.StageSnapshotStart,
+			Seq:       -1,
+		})
+	}
+
 	snap, snapErr := d.sessionSvc.Snapshot(req.SessionID)
+
+	if d.tracer.Enabled() {
+		snapLen := 0
+		if snapErr == nil {
+			snapLen = len(snap.Replay)
+		}
+		d.tracer.Emit(debug.Event{
+			SessionID: req.SessionID,
+			Stage:     debug.StageSnapshotDone,
+			Seq:       -1,
+			ByteLen:   snapLen,
+		})
+	}
+
 	if snapErr == nil && len(snap.Replay) > 0 {
 		resp.Snapshot = &SnapshotResponse{Replay: snap.Replay}
 	}
@@ -548,6 +595,14 @@ func (d *Daemon) handleDetach(c ConnectedClient, frame protocol.Frame) {
 			SessionID: req.SessionID,
 			Payload:   nil,
 		})
+
+		if d.tracer.Enabled() {
+			d.tracer.Emit(debug.Event{
+				SessionID: req.SessionID,
+				Stage:     debug.StageDetach,
+				Seq:       -1,
+			})
+		}
 	}
 
 	_ = c.Control().WriteFrame(okFrame(nil))
@@ -650,6 +705,14 @@ func (d *Daemon) flushOutput() {
 
 		for clientID := range clients {
 			_ = d.server.BroadcastTo(clientID, frame)
+			if d.tracer.Enabled() {
+				d.tracer.Emit(debug.Event{
+					SessionID: sessID,
+					Stage:     debug.StageFrameSend,
+					Seq:       -1,
+					ByteLen:   len(data),
+				})
+			}
 		}
 	}
 
