@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/wblech/wmux/internal/platform/ansi"
+	"github.com/wblech/wmux/internal/platform/debug"
 	"github.com/wblech/wmux/internal/platform/event"
 	"github.com/wblech/wmux/internal/platform/history"
 	"github.com/wblech/wmux/internal/platform/protocol"
@@ -162,6 +163,7 @@ type Daemon struct {
 	recordingMaxSize   int64
 	recordingDir       string
 	maxHistoryDumpSize int64
+	tracer             *debug.Tracer
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc

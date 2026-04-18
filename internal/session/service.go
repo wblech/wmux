@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/wblech/wmux/internal/platform/debug"
 	"github.com/wblech/wmux/internal/platform/pty"
 )
 
@@ -100,6 +101,7 @@ type Service struct {
 	onExit          func(id string, exitCode int)
 	spawnSem        chan struct{}
 	emulatorFactory EmulatorFactory
+	tracer          *debug.Tracer
 }
 
 // NewService creates a new Service backed by the given Spawner.

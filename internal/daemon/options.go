@@ -1,5 +1,7 @@
 package daemon
 
+import "github.com/wblech/wmux/internal/platform/debug"
+
 // Option is a functional option for configuring a Daemon.
 type Option func(*Daemon)
 
@@ -69,4 +71,9 @@ func WithMaxHistoryDumpSize(n int64) Option {
 	return func(d *Daemon) {
 		d.maxHistoryDumpSize = n
 	}
+}
+
+// WithTracer sets the debug tracer for instrumentation.
+func WithTracer(t *debug.Tracer) Option {
+	return func(d *Daemon) { d.tracer = t }
 }

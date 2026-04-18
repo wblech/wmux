@@ -1,5 +1,7 @@
 package session
 
+import "github.com/wblech/wmux/internal/platform/debug"
+
 // Option is a functional option for configuring a Service.
 type Option func(*Service)
 
@@ -29,4 +31,9 @@ func WithSpawnSemaphore(n int) Option {
 // When set, sessions use the factory emulator instead of NoneEmulator.
 func WithEmulatorFactory(f EmulatorFactory) Option {
 	return func(s *Service) { s.emulatorFactory = f }
+}
+
+// WithTracer sets the debug tracer for instrumentation.
+func WithTracer(t *debug.Tracer) Option {
+	return func(s *Service) { s.tracer = t }
 }
