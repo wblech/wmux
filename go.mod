@@ -49,3 +49,5 @@ require (
 )
 
 replace github.com/wblech/wmux/addons/charmvt => ./addons/charmvt
+
+replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260413165052-6921c759c913

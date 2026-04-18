@@ -4,7 +4,7 @@ go 1.26.1
 
 replace github.com/wblech/wmux => ../../
 
-replace github.com/charmbracelet/x/vt => ../../../x/vt
+replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260413165052-6921c759c913
 
 require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260414011438-8c69ec811b1e
