@@ -2,6 +2,47 @@
 
 All notable changes to the charmvt addon are documented in this file.
 
+## [0.2.1](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.2.1) - 2026-04-20
+
+### Bug Fixes
+
+- Disable ED2 scrollback push to prevent snapshot duplication *(charmvt)*
+- Resolve golangci-lint issues (exhaustruct, errcheck, wrapcheck, testifylint) *(debug)*
+- Wrap Close error, configure exhaustruct excludes, remove redundant nolints *(debug)*
+
+### Documentation
+
+- Show Snapshot struct in 'Writing your own addon' *(integration)*
+- Document WithSnapshotScrollbackMode option *(integration)*
+- Add 0028 for ED2 scrollback behavior and snapshot filtering *(adr)*
+- Add 0029 for debug instrumentation design *(adr)*
+
+### Features
+
+- Add SnapshotScrollbackMode type and WithSnapshotScrollbackMode option *(charmvt)*
+- Implement scrollback baseline for SinceLastClear mode *(charmvt)*
+- Add Level, Stage, and Event types *(debug)*
+- Add TracerOption with WithMaxSize and WithMaxFiles *(debug)*
+- Implement Tracer with slog + lumberjack *(debug)*
+- Add env var configuration (WMUX_DEBUG, WMUX_DEBUG_PATH, etc) *(debug)*
+- Add WithTracer option to session.Service and daemon.Daemon *(debug)*
+- Add SDK options and wire tracer through daemon *(debug)*
+- Instrument session readLoop, emulatorLoop, waitLoop, and Buffer *(debug)*
+- Instrument daemon handlers and broadcastOutput *(debug)*
+
+### Refactoring
+
+- Rename renderScrollback to renderScrollbackFrom with from parameter *(charmvt)*
+
+### Testing
+
+- Add SinceLastClear variants for EC5 and EC16 edge cases *(charmvt)*
+
+### Build
+
+- Point x/vt replace to remote fork instead of local path
+- Update x/vt fork to version with SetED2SavesScrollback
+
 ## [0.2.0](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.2.0) - 2026-04-17
 
 ### Documentation
