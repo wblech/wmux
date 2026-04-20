@@ -20,7 +20,7 @@ require (
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect
-	github.com/charmbracelet/x/vt v0.0.0-20260413165052-6921c759c913 // indirect
+	github.com/charmbracelet/x/vt v0.0.0-20260417190116-518773753720 // indirect
 	github.com/charmbracelet/x/windows v0.2.2 // indirect
 	github.com/clipperhouse/displaywidth v0.9.0 // indirect
 	github.com/clipperhouse/stringish v0.1.1 // indirect
@@ -51,4 +51,4 @@ require (
 
 replace github.com/wblech/wmux/addons/charmvt => ./addons/charmvt
 
-replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260413165052-6921c759c913
+replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260417190116-518773753720

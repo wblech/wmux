@@ -4,11 +4,11 @@ go 1.26.1
 
 replace github.com/wblech/wmux => ../../
 
-replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260413165052-6921c759c913
+replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260417190116-518773753720
 
 require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260414011438-8c69ec811b1e
-	github.com/charmbracelet/x/vt v0.0.0-20260413165052-6921c759c913
+	github.com/charmbracelet/x/vt v0.0.0-20260417190116-518773753720
 	github.com/stretchr/testify v1.11.1
 	github.com/wblech/wmux v0.0.0-00010101000000-000000000000
 )
@@ -37,5 +37,6 @@ require (
 	go.uber.org/zap v1.26.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
