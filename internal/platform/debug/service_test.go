@@ -15,7 +15,7 @@ func TestTracer_NilIsDisabled(t *testing.T) {
 	var tr *Tracer
 	assert.False(t, tr.Enabled())
 	assert.Equal(t, LevelOff, tr.Level())
-	tr.Emit(Event{Stage: StagePtyRead}) //nolint:exhaustruct
+	tr.Emit(Event{Stage: StagePtyRead})
 }
 
 func TestTracer_LevelOffIsDisabled(t *testing.T) {
@@ -33,7 +33,7 @@ func TestTracer_EmitWritesJSONLine(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{ //nolint:exhaustruct
+	tr.Emit(Event{
 		SessionID: "sess-1",
 		Stage:     StageSessionCreate,
 		Seq:       -1,
@@ -62,7 +62,7 @@ func TestTracer_LevelFiltersChunkFields(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{ //nolint:exhaustruct
+	tr.Emit(Event{
 		SessionID: "sess-1",
 		Stage:     StagePtyRead,
 		Seq:       1,
@@ -89,7 +89,7 @@ func TestTracer_LevelChunkIncludesChunkFields(t *testing.T) {
 	tr, err := NewTracer(path, LevelChunk)
 	require.NoError(t, err)
 
-	tr.Emit(Event{ //nolint:exhaustruct
+	tr.Emit(Event{
 		SessionID: "sess-1",
 		Stage:     StagePtyRead,
 		Seq:       1,
@@ -120,7 +120,7 @@ func TestTracer_LevelFullIncludesFullHex(t *testing.T) {
 	tr, err := NewTracer(path, LevelFull)
 	require.NoError(t, err)
 
-	tr.Emit(Event{ //nolint:exhaustruct
+	tr.Emit(Event{
 		SessionID: "sess-1",
 		Stage:     StagePtyRead,
 		Seq:       1,
@@ -146,7 +146,7 @@ func TestTracer_OmitsZeroValueExtras(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{ //nolint:exhaustruct
+	tr.Emit(Event{
 		SessionID: "sess-1",
 		Stage:     StageAttach,
 		Seq:       -1,
@@ -199,9 +199,9 @@ func TestTracer_MultipleEvents(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1}) //nolint:exhaustruct
-	tr.Emit(Event{SessionID: "s1", Stage: StageAttach, Seq: -1})        //nolint:exhaustruct
-	tr.Emit(Event{SessionID: "s1", Stage: StageDetach, Seq: -1})        //nolint:exhaustruct
+	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1})
+	tr.Emit(Event{SessionID: "s1", Stage: StageAttach, Seq: -1})
+	tr.Emit(Event{SessionID: "s1", Stage: StageDetach, Seq: -1})
 	require.NoError(t, tr.Close())
 
 	f, err := os.Open(path)
@@ -222,7 +222,7 @@ func TestTracer_CreatesParentDirs(t *testing.T) {
 	tr, err := NewTracer(nested, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1}) //nolint:exhaustruct
+	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1})
 	require.NoError(t, tr.Close())
 
 	_, err = os.Stat(nested)

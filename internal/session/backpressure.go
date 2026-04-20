@@ -48,7 +48,7 @@ func (b *Buffer) Write(p []byte) (int, error) {
 	}
 
 	if b.tracer.Enabled() {
-		b.tracer.Emit(debug.Event{ //nolint:exhaustruct
+		b.tracer.Emit(debug.Event{
 			SessionID:  b.sessionID,
 			Stage:      debug.StageBufferAppend,
 			Seq:        -1,
@@ -58,7 +58,7 @@ func (b *Buffer) Write(p []byte) (int, error) {
 		})
 
 		if !wasPaused && b.paused {
-			b.tracer.Emit(debug.Event{ //nolint:exhaustruct
+			b.tracer.Emit(debug.Event{
 				SessionID:  b.sessionID,
 				Stage:      debug.StageBufferPause,
 				Seq:        -1,
@@ -91,7 +91,7 @@ func (b *Buffer) Read() []byte {
 	b.checkResume(0)
 
 	if b.tracer.Enabled() {
-		b.tracer.Emit(debug.Event{ //nolint:exhaustruct
+		b.tracer.Emit(debug.Event{
 			SessionID:  b.sessionID,
 			Stage:      debug.StageBufferFlush,
 			Seq:        -1,
@@ -100,7 +100,7 @@ func (b *Buffer) Read() []byte {
 		})
 
 		if wasPaused && !b.paused {
-			b.tracer.Emit(debug.Event{ //nolint:exhaustruct
+			b.tracer.Emit(debug.Event{
 				SessionID:  b.sessionID,
 				Stage:      debug.StageBufferResume,
 				Seq:        -1,
@@ -139,7 +139,7 @@ func (b *Buffer) ReadN(n int) []byte {
 	b.checkResume(len(b.data))
 
 	if b.tracer.Enabled() {
-		b.tracer.Emit(debug.Event{ //nolint:exhaustruct
+		b.tracer.Emit(debug.Event{
 			SessionID:  b.sessionID,
 			Stage:      debug.StageBufferFlush,
 			Seq:        -1,
@@ -148,7 +148,7 @@ func (b *Buffer) ReadN(n int) []byte {
 		})
 
 		if wasPaused && !b.paused {
-			b.tracer.Emit(debug.Event{ //nolint:exhaustruct
+			b.tracer.Emit(debug.Event{
 				SessionID:  b.sessionID,
 				Stage:      debug.StageBufferResume,
 				Seq:        -1,

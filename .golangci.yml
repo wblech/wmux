@@ -29,4 +29,10 @@ linters:
         - name: exported
     exhaustruct:
       exclude:
-        - ".*_test\\.go"
+        - "github.com/wblech/wmux/internal/platform/debug\\.Event"
+
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - exhaustruct

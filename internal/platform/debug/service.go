@@ -144,5 +144,8 @@ func (t *Tracer) Close() error {
 	if t == nil || t.file == nil {
 		return nil
 	}
-	return t.file.Close() //nolint:wrapcheck
+	if err := t.file.Close(); err != nil {
+		return fmt.Errorf("debug: close log file: %w", err)
+	}
+	return nil
 }
