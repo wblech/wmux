@@ -117,6 +117,7 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 		onExit:          nil,
 		spawnSem:        nil,
 		emulatorFactory: nil,
+		tracer:          nil,
 	}
 
 	for _, o := range opts {
@@ -516,7 +517,7 @@ func (s *Service) readLoop(ms *managedSession) {
 			select {
 			case emulatorCh <- chunk:
 				if s.tracer.Enabled() {
-					s.tracer.Emit(debug.Event{
+					s.tracer.Emit(debug.Event{ //nolint:exhaustruct
 						SessionID: ms.session.ID,
 						Stage:     debug.StageEmulatorIn,
 						Seq:       -1,
@@ -528,7 +529,7 @@ func (s *Service) readLoop(ms *managedSession) {
 				// Broadcast (batcher) already has the data; only snapshot
 				// accuracy is degraded, which self-heals on the next chunk.
 				if s.tracer.Enabled() {
-					s.tracer.Emit(debug.Event{
+					s.tracer.Emit(debug.Event{ //nolint:exhaustruct
 						SessionID: ms.session.ID,
 						Stage:     debug.StageEmulatorDrop,
 						Seq:       -1,
@@ -564,7 +565,7 @@ func (s *Service) emulatorLoop(ms *managedSession, ch <-chan []byte) {
 			ms.emulator.Process(chunk)
 
 			if s.tracer.Enabled() {
-				s.tracer.Emit(debug.Event{
+				s.tracer.Emit(debug.Event{ //nolint:exhaustruct
 					SessionID: ms.session.ID,
 					Stage:     debug.StageEmulatorOut,
 					Seq:       -1,
@@ -590,7 +591,7 @@ func (s *Service) waitLoop(ms *managedSession) {
 	s.mu.Unlock()
 
 	if s.tracer.Enabled() {
-		s.tracer.Emit(debug.Event{
+		s.tracer.Emit(debug.Event{ //nolint:exhaustruct
 			SessionID: ms.session.ID,
 			Stage:     debug.StageSessionClose,
 			Seq:       -1,
@@ -622,7 +623,7 @@ func (s *Service) waitLoop(ms *managedSession) {
 // chunkEvent builds an Event with chunk-level fields populated according
 // to the tracer's configured level.
 func chunkEvent(t *debug.Tracer, sessionID string, stage debug.Stage, data []byte) debug.Event {
-	ev := debug.Event{
+	ev := debug.Event{ //nolint:exhaustruct
 		SessionID: sessionID,
 		Stage:     stage,
 		Seq:       t.NextSeq(sessionID),

@@ -79,7 +79,7 @@ func (d *Daemon) Serve(ctx context.Context) error {
 		if tracerErr != nil {
 			return fmt.Errorf("client: create debug tracer: %w", tracerErr)
 		}
-		defer tracer.Close()
+		defer tracer.Close() //nolint:errcheck
 	}
 
 	var sessionOpts []session.Option
@@ -117,7 +117,7 @@ func (d *Daemon) Serve(ctx context.Context) error {
 func (d *Daemon) resolveDebugConfig() debug.EnvConfig {
 	env := debug.ReadEnv()
 
-	cfg := debug.EnvConfig{
+	cfg := debug.EnvConfig{ //nolint:exhaustruct
 		MaxSizeMB: 50,
 		MaxFiles:  7,
 	}

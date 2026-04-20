@@ -146,7 +146,7 @@ func TestNew_AutoStart(t *testing.T) {
 }
 
 func TestBuildDaemonArgs(t *testing.T) {
-	cfg := &config{
+	cfg := &config{ //nolint:exhaustruct
 		namespace:         "watchtower",
 		baseDir:           "/tmp/wmux",
 		socket:            "/tmp/wmux/watchtower/daemon.sock",
@@ -260,7 +260,7 @@ func TestNewDaemon_SessionOperations(t *testing.T) {
 }
 
 func TestBuildDaemonArgs_Defaults(t *testing.T) {
-	cfg := &config{
+	cfg := &config{ //nolint:exhaustruct
 		namespace:         "default",
 		baseDir:           "",
 		socket:            "/tmp/d.sock",

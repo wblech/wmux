@@ -7,10 +7,10 @@ import (
 )
 
 func TestLevel_Constants(t *testing.T) {
-	assert.Equal(t, Level(0), LevelOff)
-	assert.Equal(t, Level(1), LevelLifecycle)
-	assert.Equal(t, Level(2), LevelChunk)
-	assert.Equal(t, Level(3), LevelFull)
+	assert.Equal(t, LevelOff, Level(0))
+	assert.Equal(t, LevelLifecycle, Level(1))
+	assert.Equal(t, LevelChunk, Level(2))
+	assert.Equal(t, LevelFull, Level(3))
 }
 
 func TestStage_Constants(t *testing.T) {

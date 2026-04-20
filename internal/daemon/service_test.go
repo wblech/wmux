@@ -2943,6 +2943,7 @@ func newTestDaemonUnit(sm SessionManager, bus EventBus, attachments map[string]m
 		recordingMaxSize:   0,
 		recordingDir:       "",
 		maxHistoryDumpSize: 0,
+		tracer:             nil,
 	}
 }
 

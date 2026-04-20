@@ -15,7 +15,7 @@ func TestTracer_NilIsDisabled(t *testing.T) {
 	var tr *Tracer
 	assert.False(t, tr.Enabled())
 	assert.Equal(t, LevelOff, tr.Level())
-	tr.Emit(Event{Stage: StagePtyRead})
+	tr.Emit(Event{Stage: StagePtyRead}) //nolint:exhaustruct
 }
 
 func TestTracer_LevelOffIsDisabled(t *testing.T) {
@@ -23,7 +23,7 @@ func TestTracer_LevelOffIsDisabled(t *testing.T) {
 	path := filepath.Join(dir, "test.log")
 	tr, err := NewTracer(path, LevelOff)
 	require.NoError(t, err)
-	defer tr.Close()
+	defer tr.Close() //nolint:errcheck
 	assert.False(t, tr.Enabled())
 }
 
@@ -33,7 +33,7 @@ func TestTracer_EmitWritesJSONLine(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{
+	tr.Emit(Event{ //nolint:exhaustruct
 		SessionID: "sess-1",
 		Stage:     StageSessionCreate,
 		Seq:       -1,
@@ -50,9 +50,9 @@ func TestTracer_EmitWritesJSONLine(t *testing.T) {
 
 	assert.Equal(t, "session.create", record["msg"])
 	assert.Equal(t, "sess-1", record["session_id"])
-	assert.Equal(t, float64(-1), record["seq"])
-	assert.Equal(t, float64(80), record["cols"])
-	assert.Equal(t, float64(24), record["rows"])
+	assert.EqualValues(t, -1, record["seq"])
+	assert.EqualValues(t, 80, record["cols"])
+	assert.EqualValues(t, 24, record["rows"])
 	assert.Contains(t, record, "time")
 }
 
@@ -62,7 +62,7 @@ func TestTracer_LevelFiltersChunkFields(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{
+	tr.Emit(Event{ //nolint:exhaustruct
 		SessionID: "sess-1",
 		Stage:     StagePtyRead,
 		Seq:       1,
@@ -89,7 +89,7 @@ func TestTracer_LevelChunkIncludesChunkFields(t *testing.T) {
 	tr, err := NewTracer(path, LevelChunk)
 	require.NoError(t, err)
 
-	tr.Emit(Event{
+	tr.Emit(Event{ //nolint:exhaustruct
 		SessionID: "sess-1",
 		Stage:     StagePtyRead,
 		Seq:       1,
@@ -107,7 +107,7 @@ func TestTracer_LevelChunkIncludesChunkFields(t *testing.T) {
 	var record map[string]any
 	require.NoError(t, json.Unmarshal(data, &record))
 
-	assert.Equal(t, float64(100), record["byte_len"])
+	assert.EqualValues(t, 100, record["byte_len"])
 	assert.Equal(t, "aabbccdd", record["head_hex"])
 	assert.Equal(t, "eeff0011", record["tail_hex"])
 	assert.Equal(t, "12345678", record["sha1"])
@@ -120,7 +120,7 @@ func TestTracer_LevelFullIncludesFullHex(t *testing.T) {
 	tr, err := NewTracer(path, LevelFull)
 	require.NoError(t, err)
 
-	tr.Emit(Event{
+	tr.Emit(Event{ //nolint:exhaustruct
 		SessionID: "sess-1",
 		Stage:     StagePtyRead,
 		Seq:       1,
@@ -146,7 +146,7 @@ func TestTracer_OmitsZeroValueExtras(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{
+	tr.Emit(Event{ //nolint:exhaustruct
 		SessionID: "sess-1",
 		Stage:     StageAttach,
 		Seq:       -1,
@@ -172,7 +172,7 @@ func TestTracer_NextSeq_PerSession(t *testing.T) {
 	path := filepath.Join(dir, "test.log")
 	tr, err := NewTracer(path, LevelChunk)
 	require.NoError(t, err)
-	defer tr.Close()
+	defer tr.Close() //nolint:errcheck
 
 	assert.Equal(t, int64(1), tr.NextSeq("a"))
 	assert.Equal(t, int64(2), tr.NextSeq("a"))
@@ -185,7 +185,7 @@ func TestTracer_ResetSeq(t *testing.T) {
 	path := filepath.Join(dir, "test.log")
 	tr, err := NewTracer(path, LevelChunk)
 	require.NoError(t, err)
-	defer tr.Close()
+	defer tr.Close() //nolint:errcheck
 
 	tr.NextSeq("a")
 	tr.NextSeq("a")
@@ -199,14 +199,14 @@ func TestTracer_MultipleEvents(t *testing.T) {
 	tr, err := NewTracer(path, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1})
-	tr.Emit(Event{SessionID: "s1", Stage: StageAttach, Seq: -1})
-	tr.Emit(Event{SessionID: "s1", Stage: StageDetach, Seq: -1})
+	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1}) //nolint:exhaustruct
+	tr.Emit(Event{SessionID: "s1", Stage: StageAttach, Seq: -1})        //nolint:exhaustruct
+	tr.Emit(Event{SessionID: "s1", Stage: StageDetach, Seq: -1})        //nolint:exhaustruct
 	require.NoError(t, tr.Close())
 
 	f, err := os.Open(path)
 	require.NoError(t, err)
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	scanner := bufio.NewScanner(f)
 	var lines int
@@ -222,7 +222,7 @@ func TestTracer_CreatesParentDirs(t *testing.T) {
 	tr, err := NewTracer(nested, LevelLifecycle)
 	require.NoError(t, err)
 
-	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1})
+	tr.Emit(Event{SessionID: "s1", Stage: StageSessionCreate, Seq: -1}) //nolint:exhaustruct
 	require.NoError(t, tr.Close())
 
 	_, err = os.Stat(nested)

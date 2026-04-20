@@ -36,6 +36,10 @@ func newConfig(opts ...Option) *config {
 		autoStart:         true,
 		rpcTimeout:        10 * time.Second,
 		emulatorFactory:   nil,
+		debugLogPath:      "",
+		debugLevel:        0,
+		debugMaxSize:      0,
+		debugMaxFiles:     0,
 	}
 	for _, o := range opts {
 		o(cfg)

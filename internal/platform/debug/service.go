@@ -2,6 +2,7 @@ package debug
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -28,10 +29,10 @@ func NewTracer(path string, level Level, opts ...TracerOption) (*Tracer, error) 
 	cfg := newTracerConfig(opts...)
 
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("debug: create log dir: %w", err)
 	}
 
-	lj := &lumberjack.Logger{
+	lj := &lumberjack.Logger{ //nolint:exhaustruct
 		Filename:   path,
 		MaxSize:    cfg.maxSizeMB,
 		MaxBackups: cfg.maxFiles,
@@ -39,12 +40,12 @@ func NewTracer(path string, level Level, opts ...TracerOption) (*Tracer, error) 
 		Compress:   false,
 	}
 
-	handler := slog.NewJSONHandler(lj, &slog.HandlerOptions{
+	handler := slog.NewJSONHandler(lj, &slog.HandlerOptions{ //nolint:exhaustruct
 		Level:     slog.LevelInfo,
 		AddSource: false,
 	})
 
-	return &Tracer{
+	return &Tracer{ //nolint:exhaustruct
 		logger: slog.New(handler),
 		level:  level,
 		file:   lj,
@@ -143,5 +144,5 @@ func (t *Tracer) Close() error {
 	if t == nil || t.file == nil {
 		return nil
 	}
-	return t.file.Close()
+	return t.file.Close() //nolint:wrapcheck
 }

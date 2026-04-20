@@ -22,6 +22,7 @@ const (
 // Stage identifies where in the PTY data pipeline an event was emitted.
 type Stage string
 
+// Stage constants identify each point in the PTY data pipeline.
 const (
 	StagePtyRead       Stage = "pty.read"
 	StageBufferAppend  Stage = "buffer.append"

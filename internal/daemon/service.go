@@ -190,6 +190,7 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		recordingMaxSize:   0,
 		recordingDir:       "",
 		maxHistoryDumpSize: 0,
+		tracer:             nil,
 	}
 
 	for _, o := range opts {
@@ -383,7 +384,7 @@ func (d *Daemon) handleCreate(c ConnectedClient, frame protocol.Frame) {
 	})
 
 	if d.tracer.Enabled() {
-		d.tracer.Emit(debug.Event{
+		d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 			SessionID: req.ID,
 			Stage:     debug.StageSessionCreate,
 			Seq:       -1,
@@ -460,7 +461,7 @@ func (d *Daemon) handleResize(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	if d.tracer.Enabled() {
-		d.tracer.Emit(debug.Event{
+		d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 			SessionID: req.SessionID,
 			Stage:     debug.StageResize,
 			Seq:       -1,
@@ -527,12 +528,12 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	if d.tracer.Enabled() {
-		d.tracer.Emit(debug.Event{
+		d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 			SessionID: req.SessionID,
 			Stage:     debug.StageAttach,
 			Seq:       -1,
 		})
-		d.tracer.Emit(debug.Event{
+		d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 			SessionID: req.SessionID,
 			Stage:     debug.StageSnapshotStart,
 			Seq:       -1,
@@ -546,7 +547,7 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 		if snapErr == nil {
 			snapLen = len(snap.Replay)
 		}
-		d.tracer.Emit(debug.Event{
+		d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 			SessionID: req.SessionID,
 			Stage:     debug.StageSnapshotDone,
 			Seq:       -1,
@@ -597,7 +598,7 @@ func (d *Daemon) handleDetach(c ConnectedClient, frame protocol.Frame) {
 		})
 
 		if d.tracer.Enabled() {
-			d.tracer.Emit(debug.Event{
+			d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 				SessionID: req.SessionID,
 				Stage:     debug.StageDetach,
 				Seq:       -1,
@@ -706,7 +707,7 @@ func (d *Daemon) flushOutput() {
 		for clientID := range clients {
 			_ = d.server.BroadcastTo(clientID, frame)
 			if d.tracer.Enabled() {
-				d.tracer.Emit(debug.Event{
+				d.tracer.Emit(debug.Event{ //nolint:exhaustruct
 					SessionID: sessID,
 					Stage:     debug.StageFrameSend,
 					Seq:       -1,

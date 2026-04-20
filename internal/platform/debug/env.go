@@ -20,7 +20,7 @@ type EnvConfig struct {
 // WMUX_DEBUG=1 or WMUX_DEBUG_PATH=... enables debug tracing.
 // Returns a zero EnvConfig (Enabled=false) when no env vars are set.
 func ReadEnv() EnvConfig {
-	cfg := EnvConfig{
+	cfg := EnvConfig{ //nolint:exhaustruct
 		MaxSizeMB: 50,
 		MaxFiles:  7,
 	}
