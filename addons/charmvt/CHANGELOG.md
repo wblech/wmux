@@ -2,6 +2,18 @@
 
 All notable changes to the charmvt addon are documented in this file.
 
+## [0.2.2](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.2.2) - 2026-04-21
+
+### Bug Fixes
+
+- Scrollback off-by-one in Snapshot serialization *(charmvt)*
+- Preserve DECSTBM scroll region in Snapshot *(charmvt)*
+- Preserve DECSC saved cursor in Snapshot *(charmvt)*
+
+### Documentation
+
+- 0030 snapshot preserves scroll region and saved cursor *(adr)*
+
 ## [0.2.1](https://github.com/wblech/wmux/releases/tag/addons/charmvt/v0.2.1) - 2026-04-20
 
 ### Bug Fixes
