@@ -50,6 +50,6 @@ require (
 
 replace github.com/wblech/wmux/addons/charmvt => ./addons/charmvt
 
-replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260417190116-518773753720
+replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260421192609-486576d2cb45
 
 replace github.com/charmbracelet/x/ansi => github.com/wblech/x/ansi v0.11.8-0.20260421015509-dfe3187b686c

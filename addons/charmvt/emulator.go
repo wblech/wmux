@@ -152,6 +152,13 @@ func (e *emulator) Snapshot() client.Snapshot {
 	viewport = toTerminalLineEndings(viewport)
 	buf.WriteString(viewport)
 
+	// Re-emit the active DECSTBM scroll region before positioning the cursor.
+	// Without this, a replaying emulator treats the full screen as the scroll
+	// region, so subsequent LFs scroll past the original region boundary.
+	if top, bottom, defined := e.term.ScrollRegion(); defined {
+		fmt.Fprintf(&buf, "\x1b[%d;%dr", top, bottom)
+	}
+
 	pos := e.term.CursorPosition()
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", pos.Y+1, pos.X+1)
 

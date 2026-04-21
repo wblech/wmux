@@ -661,7 +661,7 @@ func TestWatermark_EC19_ConcurrentSafety(t *testing.T) {
 
 	// Basic sanity: no panics, all snapshots non-empty.
 	for i, size := range snapshots {
-		require.Greater(t, size, 0, "snapshot %d must be non-empty", i)
+		require.Positive(t, size, "snapshot %d must be non-empty", i)
 	}
 }
 
