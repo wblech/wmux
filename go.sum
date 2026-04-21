@@ -50,8 +50,8 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/wblech/x/ansi v0.11.8-0.20260421015509-dfe3187b686c h1:AJGUOUyK767At0JDHt5iDdU+MYZJRVFwOO7YBrSPw4A=
 github.com/wblech/x/ansi v0.11.8-0.20260421015509-dfe3187b686c/go.mod h1:9qGpnAVYz+8ACONkZBUWPtL7lulP9No6p1epAihUZwQ=
-github.com/wblech/x/vt v0.0.0-20260421192609-486576d2cb45 h1:ISpyz3wmMLCcNqPPeE6yhL3Kmqb15RfChNPfIG0k6hg=
-github.com/wblech/x/vt v0.0.0-20260421192609-486576d2cb45/go.mod h1:2djWW5EeP5QlpztEYYbbyyzUyyxVD71mWVQguNISHcM=
+github.com/wblech/x/vt v0.0.0-20260421193251-70614a72ea0c h1:aZDh7cPyLqG/RvuC0rABNW9AkVgE0f4wPRuJ2rsnz/o=
+github.com/wblech/x/vt v0.0.0-20260421193251-70614a72ea0c/go.mod h1:2djWW5EeP5QlpztEYYbbyyzUyyxVD71mWVQguNISHcM=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavMF/ppJZNG9ZpyihvCd0w101no=
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 go.uber.org/dig v1.19.0 h1:BACLhebsYdpQ7IROQ1AGPjrXcP5dF80U3gKoFzbaq/4=

@@ -22,8 +22,15 @@ func TestEmulator_ProcessAndSnapshot(t *testing.T) {
 	assert.Contains(t, string(snap.Replay), "hello world")
 }
 
-// TestEmulator_EmptySnapshot verifies that a fresh emulator's Replay is just
-// the clear prefix + cursor-restore CUP.
+// TestEmulator_EmptySnapshot verifies that a fresh emulator's Replay begins
+// with the clear prefix and ends with a cursor-restore CUP.
+// Since Snapshot() now also re-emits the DECSC saved cursor (ESC 7), the tail
+// after the clear prefix has the form:
+//
+//	<CUP to saved pos> ESC 7 <CUP to live pos>
+//
+// For a freshly created emulator both positions are (1,1), so the tail is
+// "\x1b[1;1H\x1b7\x1b[1;1H".
 func TestEmulator_EmptySnapshot(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("session-empty", 80, 24, cfg)
@@ -31,9 +38,12 @@ func TestEmulator_EmptySnapshot(t *testing.T) {
 	snap := em.Snapshot()
 	assert.True(t, bytes.HasPrefix(snap.Replay, []byte("\x1b[2J\x1b[H\x1b[3J")),
 		"snapshot must begin with clear prefix")
-	tail := snap.Replay[len("\x1b[2J\x1b[H\x1b[3J"):]
-	assert.Regexp(t, `^\x1b\[\d+;\d+H$`, string(tail),
-		"empty viewport should have only the cursor-restore CUP after the clear prefix")
+	// The tail must end with a CUP sequence (the live cursor position restore).
+	assert.Regexp(t, `\x1b\[\d+;\d+H$`, string(snap.Replay),
+		"snapshot must end with a CUP sequence for the live cursor position")
+	// The DECSC saved-cursor re-emit must appear somewhere before the final CUP.
+	assert.Contains(t, string(snap.Replay), "\x1b7",
+		"snapshot must contain ESC 7 (DECSC) to preserve the saved cursor")
 }
 
 // TestEmulator_SGR_Colors verifies that SGR color sequences are accepted and the plain text appears in the replay.

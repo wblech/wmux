@@ -4,11 +4,11 @@ go 1.26.1
 
 replace github.com/wblech/wmux => ../../
 
-replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260421192609-486576d2cb45
+replace github.com/charmbracelet/x/vt => github.com/wblech/x/vt v0.0.0-20260421193251-70614a72ea0c
 
 require (
 	github.com/charmbracelet/ultraviolet v0.0.0-20260414011438-8c69ec811b1e
-	github.com/charmbracelet/x/vt v0.0.0-20260421192609-486576d2cb45
+	github.com/charmbracelet/x/vt v0.0.0-20260421193251-70614a72ea0c
 	github.com/stretchr/testify v1.11.1
 	github.com/wblech/wmux v0.0.0-00010101000000-000000000000
 )

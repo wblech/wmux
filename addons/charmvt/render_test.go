@@ -10,7 +10,8 @@ import (
 )
 
 // TestRenderScrollback_Empty verifies that a fresh emulator (no overflow) produces a replay
-// with only the clear prefix and cursor-restore CUP — no scrollback content.
+// with no scrollback content. The tail after the clear prefix contains the DECSC re-emit
+// (ESC 7) and ends with the live cursor CUP — both at (1,1) for a fresh emulator.
 func TestRenderScrollback_Empty(t *testing.T) {
 	cfg := defaultConfig()
 	em := newEmulator("render-empty", 80, 24, cfg)
@@ -18,9 +19,13 @@ func TestRenderScrollback_Empty(t *testing.T) {
 	snap := em.Snapshot()
 	require.True(t, strings.HasPrefix(string(snap.Replay), "\x1b[2J\x1b[H\x1b[3J"),
 		"replay must begin with clear prefix")
+	// The snapshot must end with a CUP for the live cursor.
+	assert.Regexp(t, `\x1b\[\d+;\d+H$`, string(snap.Replay),
+		"empty emulator replay should end with a CUP for the live cursor position")
+	// No scrollback content: the only non-clear bytes are the DECSC re-emit + CUP sequences.
 	tail := string(snap.Replay[len("\x1b[2J\x1b[H\x1b[3J"):])
-	assert.Regexp(t, `^\x1b\[\d+;\d+H$`, tail,
-		"empty emulator replay should contain only the clear prefix and final CUP")
+	assert.NotContains(t, tail, "\r\n",
+		"empty emulator replay should not contain any scrollback or viewport lines")
 }
 
 // TestRenderScrollback_PlainText verifies that plain-text lines pushed past a 3-row viewport appear

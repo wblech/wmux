@@ -159,6 +159,14 @@ func (e *emulator) Snapshot() client.Snapshot {
 		fmt.Fprintf(&buf, "\x1b[%d;%dr", top, bottom)
 	}
 
+	// Re-emit the DECSC saved cursor (ESC 7) so that a subsequent DECRC
+	// (ESC 8) in the live stream restores the correct position.
+	// We move to the saved position, emit ESC 7, then move back to the live
+	// cursor.  Position-only restore is sufficient for the replay contract;
+	// full attribute restore (SGR, charset, origin mode) is a follow-up.
+	savedX, savedY, _ := e.term.SavedCursor()
+	fmt.Fprintf(&buf, "\x1b[%d;%dH\x1b7", savedY+1, savedX+1)
+
 	pos := e.term.CursorPosition()
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", pos.Y+1, pos.X+1)
 
