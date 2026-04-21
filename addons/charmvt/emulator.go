@@ -87,10 +87,11 @@ func newEmulator(sessionID string, cols, rows int, cfg *config) *emulator {
 	go drainResponsePipe(term)
 
 	return &emulator{
-		mu:             sync.Mutex{},
-		term:           term,
-		cols:           cols,
-		scrollbackMode: cfg.scrollbackMode,
+		mu:                 sync.Mutex{},
+		term:               term,
+		cols:               cols,
+		scrollbackMode:     cfg.scrollbackMode,
+		scrollbackBaseline: 0,
 	}
 }
 
@@ -132,12 +133,22 @@ func (e *emulator) Snapshot() client.Snapshot {
 		from = min(e.scrollbackBaseline, e.term.ScrollbackLen())
 	}
 
-	if sb := renderScrollbackFrom(e.term, e.cols, from); sb != nil {
-		buf.Write(sb)
+	sbBytes := renderScrollbackFrom(e.term, e.cols, from)
+	if sbBytes != nil {
+		buf.Write(sbBytes)
 	}
 
 	viewport := e.term.Render()
-	viewport = trimTrailingEmptyRows(viewport)
+	// When scrollback was serialized into the replay stream, the viewport
+	// write must produce exactly one \r\n per viewport row so that replaying
+	// the stream triggers the right number of scroll events to push all
+	// serialized scrollback lines off-screen. Trimming the trailing empty
+	// row removes one \r\n and causes one too few scrolls, leaving the last
+	// scrollback line visible at the top of the replayed viewport (off-by-one).
+	// Only trim when there is no serialized scrollback to avoid the issue.
+	if sbBytes == nil {
+		viewport = trimTrailingEmptyRows(viewport)
+	}
 	viewport = toTerminalLineEndings(viewport)
 	buf.WriteString(viewport)
 
