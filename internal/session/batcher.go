@@ -8,6 +8,17 @@ import (
 // minBatchInterval is the smallest allowed flush interval.
 const minBatchInterval = time.Millisecond
 
+// flushBufPool reuses []byte buffers handed to onFlush callbacks.
+// Contract: the slice passed to onFlush is only valid for the duration of the
+// call. Callers must copy if they need to retain it. Both production callers
+// (Buffer.Write via append) and tests already copy, so this is safe.
+var flushBufPool = sync.Pool{
+	New: func() any {
+		s := make([]byte, 0, 64*1024)
+		return &s
+	},
+}
+
 // Batcher accumulates bytes and flushes them to a callback on a configurable interval.
 // It runs an internal goroutine that drives timer-based flushes.
 type Batcher struct {
@@ -96,6 +107,11 @@ func (b *Batcher) loop() {
 }
 
 // doFlush drains the buffer and calls onFlush if there is data.
+//
+// The slice passed to onFlush is borrowed from a pool and is only valid for
+// the duration of the call. Callers that need to retain the data must copy
+// it. The Buffer.Write call site copies via append, so this is safe in
+// production.
 func (b *Batcher) doFlush() {
 	b.mu.Lock()
 
@@ -104,12 +120,15 @@ func (b *Batcher) doFlush() {
 		return
 	}
 
-	// Copy so the caller owns the slice independently.
-	out := make([]byte, len(b.buf))
-	copy(out, b.buf)
+	outPtr := flushBufPool.Get().(*[]byte)
+	*outPtr = append((*outPtr)[:0], b.buf...)
+	out := *outPtr
 	b.buf = b.buf[:0]
 
 	b.mu.Unlock()
 
 	b.onFlush(out)
+
+	*outPtr = out[:0]
+	flushBufPool.Put(outPtr)
 }
