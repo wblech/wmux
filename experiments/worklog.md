@@ -98,15 +98,61 @@ buffer's internal `append` growth remains.
 | `doFlush` only | 2757 / 1 | 967 / 0 | **-65% / 2.8×** |
 | Payload encode | 2997 / 1 (40 KB) | 591 / 0 (0 B) | **-80% / 5×** |
 
+## Run 3 — E1: size-threshold flush in batcher (2026-04-29)
+
+**Hypothesis.** The batcher waits up to 16 ms (its timer interval) before
+flushing, even when a single PTY read fills 32 KB in <1 µs. Adding a
+size threshold so `Add` signals an immediate flush when the buffer crosses
+the threshold should drop burst latency from ~16 ms to scheduling overhead.
+
+**Change.** `internal/session/batcher.go`:
+1. New constant `defaultFlushThreshold = 32 * 1024`.
+2. New `Batcher.flushThreshold int` field, set in `newBatcher`.
+3. `Add` checks `len(b.buf) >= flushThreshold` after append; if so,
+   signals the flush channel (non-blocking).
+
+**Validation strategy.** Two new benchmarks measure wall-clock latency
+between `Add` and the `onFlush` callback firing:
+- `BenchmarkBatcherBurstLatency` (64 KB chunks → crosses threshold)
+- `BenchmarkBatcherSubThresholdLatency` (1 KB chunks → stays under)
+
+The pair is an A/B in the same binary: same code path, threshold-crossing
+makes the only difference. If E1 works, big bursts are fast and small
+ones are unchanged.
+
+**Results (M3, -benchtime=2s):**
+
+| Bench | ns/op | Interpretation |
+|---|---:|---|
+| BatcherBurstLatency (64 KB chunks) | **4,227** (~4 µs) | Threshold-driven immediate flush |
+| BatcherSubThresholdLatency (1 KB chunks) | 16,439,237 (~16.4 ms) | Timer-driven, baseline behavior |
+
+**Impact.** Bursts ≥32 KB drop from ~16 ms worst-case to ~4 µs —
+**~3900×** improvement on the latency-sensitive path (interactive output,
+TUI redraws, claude code streaming). Small chunks are unchanged, so the
+batching benefit (fewer frames) is preserved for low-volume traffic.
+
+**Correctness.** Full repo `go test ./... -race -shuffle=on -count=1` passes
+across all 19 packages.
+
+**Verdict: KEPT.**
+
+## Cumulative wins (Runs 1, 2, 3)
+
+| Stage | Baseline | After | Δ |
+|---|---|---|---:|
+| Batcher Add+Flush throughput | 4273 ns / 1 alloc | 2048 ns / 0 alloc | -52% / 2.1× |
+| `doFlush` only | 2757 ns / 1 alloc | 967 ns / 0 alloc | -65% / 2.8× |
+| Payload encode | 2997 ns / 1 alloc / 40 KB | 591 ns / 0 alloc / 0 B | -80% / 5× |
+| **Burst flush latency** | **~16 ms** | **~4 µs** | **~3900×** |
+
 ## Next experiments (parked)
 
-- **E1 — size-threshold flush** (high latency win, needs latency-distribution
-  bench, not throughput bench).
 - **E2 — collapse 16 ms timer cascade** (event-driven broadcaster signal from
   batcher onFlush instead of polling). Bigger refactor; needs end-to-end
-  latency bench to validate.
-- **E3 — broadcastOutput skips idle sessions** (CPU at idle).
+  latency bench to validate. Now potentially less impactful since E1
+  already eliminates the latency on bursts — the cascade only matters for
+  sub-threshold traffic.
+- **E3 — broadcastOutput skips idle sessions** (CPU at idle, separate concern
+  from latency).
 - **E6 — document Buffer.Read ownership** (already zero-copy, just needs ADR).
-
-Pausing here — two clean wins, ready for human review / commit before more
-architectural changes.
