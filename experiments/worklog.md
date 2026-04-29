@@ -146,13 +146,67 @@ across all 19 packages.
 | Payload encode | 2997 ns / 1 alloc / 40 KB | 591 ns / 0 alloc / 0 B | -80% / 5× |
 | **Burst flush latency** | **~16 ms** | **~4 µs** | **~3900×** |
 
+## Run 4 — E2: collapse 16 ms timer cascade (2026-04-29)
+
+**Hypothesis.** After E1, the batcher flushes bursts in ~4 µs. But the data
+then sits in the session buffer for up to 16 ms waiting for the daemon's
+broadcaster ticker. Replacing the poll with an event-driven signal should
+collapse this final tail.
+
+**Change.**
+
+- `internal/session/options.go` — new `WithOnDataReady(fn func(id string))`.
+- `internal/session/service.go` — new `Service.OnDataReady` method;
+  the batcher's onFlush calls `s.onDataReady(id)` after `buf.Write`.
+- `internal/daemon/service.go`
+  — added `OnDataReady` to the `SessionManager` interface;
+  — `Daemon.dataReady chan string` (buffered 256);
+  — `Start()` registers a non-blocking sender on the channel;
+  — `broadcastOutput` selects on `dataReady` (fast path) AND `ticker.C`
+    (fallback for any dropped signals);
+  — new `flushSessionOutput(sessID)` for single-session flush.
+- All adapters (`pkg/client`, `internal/daemon` test, `test/e2e`)
+  forward the new method.
+
+The ticker is kept on purpose: a non-blocking send on a full channel
+drops the signal, but the ticker fallback ensures eventual flush. In
+practice the channel is 256-buffered and drains immediately, so the
+fast path covers ~all production traffic.
+
+**Bench (32 KB×2 burst chunk → buf.Write → signal → reader, M3, -benchtime=2s):**
+
+| Bench | ns/op | Δ |
+|---|---:|---:|
+| BatcherBurstLatency (Add → onFlush) | 4534 | unchanged |
+| **BatcherSignalLatency (Add → buf.Write → signal → consumer)** | **9043** | full path |
+| BatcherSubThresholdLatency (timer-only, 1 KB) | 16,117,537 (~16 ms) | unchanged baseline |
+
+**Impact.** End-to-end worst case: **~16 ms (poll-only) → ~9 µs (signaled),
+roughly 1800×.** Sub-threshold path unchanged — small writes still
+batch via timer.
+
+**Correctness.** Full repo `go test ./... -race -shuffle=on -count=1` passes
+across all 19 packages.
+
+**Verdict: KEPT.**
+
+## Cumulative wins (Runs 1–4)
+
+| Stage | Baseline | After | Δ |
+|---|---|---|---:|
+| Batcher Add+Flush throughput | 4273 ns / 1 alloc | 2048 / 0 | -52% |
+| `doFlush` only | 2757 ns / 1 alloc | 967 / 0 | -65% / 2.8× |
+| Payload encode | 2997 ns / 1 alloc / 40 KB | 591 / 0 / 0 B | -80% / 5× |
+| Burst flush latency (batcher only) | ~16 ms | ~4 µs | ~3900× |
+| **End-to-end signal latency** | **~16 ms** | **~9 µs** | **~1800×** |
+
+Allocs on broadcast hot path: **3 → 1 per chunk**. Only `Buffer.Write`
+internal append remains.
+
 ## Next experiments (parked)
 
-- **E2 — collapse 16 ms timer cascade** (event-driven broadcaster signal from
-  batcher onFlush instead of polling). Bigger refactor; needs end-to-end
-  latency bench to validate. Now potentially less impactful since E1
-  already eliminates the latency on bursts — the cascade only matters for
-  sub-threshold traffic.
-- **E3 — broadcastOutput skips idle sessions** (CPU at idle, separate concern
-  from latency).
-- **E6 — document Buffer.Read ownership** (already zero-copy, just needs ADR).
+- **E3 — broadcastOutput skips idle sessions** (CPU at idle; separate
+  concern from latency, lower priority now that the latency wins are in).
+- **E6 — document Buffer.Read ownership** (ADR only; the code is already
+  zero-copy via slice swap).
+- **E7/E8 — micro-tuning** of mutex/channel sizes (low ROI).
