@@ -180,6 +180,10 @@ func (a *sessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
 
+func (a *sessionAdapter) OnDataReady(fn func(id string)) {
+	a.svc.OnDataReady(fn)
+}
+
 func toInfo(sess session.Session) daemon.SessionInfo {
 	return daemon.SessionInfo{
 		ID:    sess.ID,

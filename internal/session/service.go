@@ -101,6 +101,7 @@ type Service struct {
 	spawner         pty.Spawner
 	maxSessions     int
 	onExit          func(id string, exitCode int)
+	onDataReady     func(id string)
 	spawnSem        chan struct{}
 	emulatorFactory EmulatorFactory
 	tracer          *debug.Tracer
@@ -115,6 +116,7 @@ func NewService(spawner pty.Spawner, opts ...Option) *Service {
 		spawner:         spawner,
 		maxSessions:     0,
 		onExit:          nil,
+		onDataReady:     nil,
 		spawnSem:        nil,
 		emulatorFactory: nil,
 		tracer:          nil,
@@ -192,6 +194,9 @@ func (s *Service) Create(id string, opts CreateOptions) (Session, error) {
 	buf := newBuffer(highWM, lowWM, s.tracer, id)
 	batcher := newBatcher(batchInterval, func(data []byte) {
 		buf.Write(data) //nolint:errcheck
+		if s.onDataReady != nil {
+			s.onDataReady(id)
+		}
 	})
 
 	prefix, _ := ExtractPrefix(id)
@@ -345,6 +350,16 @@ func (s *Service) OnExit(fn func(id string, exitCode int)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.onExit = fn
+}
+
+// OnDataReady registers a callback invoked synchronously each time a session
+// has new output available in its buffer (after the batcher flushes a batch).
+// The callback runs on the batcher goroutine and must be non-blocking.
+// Replaces any previously registered callback.
+func (s *Service) OnDataReady(fn func(id string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.onDataReady = fn
 }
 
 // Resize updates the terminal dimensions of the session identified by id.

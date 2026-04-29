@@ -17,6 +17,17 @@ func WithOnExit(fn func(id string, exitCode int)) Option {
 	return func(s *Service) { s.onExit = fn }
 }
 
+// WithOnDataReady registers a callback invoked synchronously after a batch of
+// PTY output has been written to a session's buffer and is available for read.
+// The callback receives the session ID.
+//
+// Used by the daemon broadcaster to wake up immediately instead of polling
+// every 16 ms. The callback must be non-blocking (typically a non-blocking
+// send to a buffered channel) — it runs on the session's batcher goroutine.
+func WithOnDataReady(fn func(id string)) Option {
+	return func(s *Service) { s.onDataReady = fn }
+}
+
 // WithSpawnSemaphore limits the number of concurrent session spawns.
 // A value of zero or less means no limit.
 func WithSpawnSemaphore(n int) Option {

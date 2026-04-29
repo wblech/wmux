@@ -164,3 +164,7 @@ func (a *sessionAdapter) UpdateEmulatorScrollback(id string, scrollbackLines int
 func (a *sessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
+
+func (a *sessionAdapter) OnDataReady(fn func(id string)) {
+	a.svc.OnDataReady(fn)
+}

@@ -117,6 +117,44 @@ func BenchmarkBatcherBurstLatency(b *testing.B) {
 	}
 }
 
+// BenchmarkBatcherSignalLatency measures end-to-end latency from Add to a
+// downstream signal — simulating the daemon broadcast wakeup path. The
+// onFlush callback writes to the buffer AND signals a notify channel,
+// mirroring the production wiring after E2.
+//
+// Pairs with BenchmarkBatcherBurstLatency: confirms that the OnDataReady
+// signal fires within scheduling overhead of the batcher flush, not after
+// an additional 16 ms daemon tick.
+func BenchmarkBatcherSignalLatency(b *testing.B) {
+	const burstChunkSize = 64 * 1024
+
+	chunk := make([]byte, burstChunkSize)
+	buf := newBuffer(4*1024*1024, 2*1024*1024, nil, "bench-signal")
+	signal := make(chan struct{}, 1024)
+
+	batcher := newBatcher(16*time.Millisecond, func(data []byte) {
+		_, _ = buf.Write(data)
+		select {
+		case signal <- struct{}{}:
+		default:
+		}
+	})
+	defer batcher.Stop()
+
+	b.SetBytes(int64(burstChunkSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		select {
+		case <-signal:
+		default:
+		}
+		batcher.Add(chunk)
+		<-signal
+		_ = buf.Read()
+	}
+}
+
 // BenchmarkBatcherSubThresholdLatency measures latency when each Add stays
 // below the size threshold. Should remain ~8 ms (half the timer interval)
 // — the size threshold must NOT shorten timer-driven flushes.

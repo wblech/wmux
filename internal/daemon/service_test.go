@@ -183,6 +183,10 @@ func (a *testSessionAdapter) OnExit(fn func(id string, exitCode int)) {
 	a.svc.OnExit(fn)
 }
 
+func (a *testSessionAdapter) OnDataReady(fn func(id string)) {
+	a.svc.OnDataReady(fn)
+}
+
 // --- test helpers ---
 
 // testDaemon creates a Daemon with a temp Unix socket. It returns the daemon,
@@ -2825,6 +2829,7 @@ func (n *noopSessionManager) MetaGet(_, _ string) (string, error)            { r
 func (n *noopSessionManager) MetaGetAll(_ string) (map[string]string, error) { return nil, nil }
 func (n *noopSessionManager) UpdateEmulatorScrollback(_ string, _ int) error { return nil }
 func (n *noopSessionManager) OnExit(_ func(id string, exitCode int))         {}
+func (n *noopSessionManager) OnDataReady(_ func(id string))                  {}
 
 // snapshotSpySessionManager extends noopSessionManager to return configurable
 // snapshot data. Used to test handleAttach snapshot population.

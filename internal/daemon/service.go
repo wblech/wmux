@@ -113,6 +113,12 @@ type SessionManager interface {
 	UpdateEmulatorScrollback(id string, scrollbackLines int) error
 	// OnExit registers a callback invoked when a session exits.
 	OnExit(fn func(id string, exitCode int))
+	// OnDataReady registers a callback invoked synchronously each time a
+	// session has new output available (after the batcher writes to the
+	// buffer). The callback runs on the batcher goroutine and must be
+	// non-blocking. Used by the broadcaster to wake up immediately instead
+	// of polling on a 16ms ticker.
+	OnDataReady(fn func(id string))
 }
 
 // ControlConn abstracts a control-channel connection.
@@ -164,6 +170,7 @@ type Daemon struct {
 	recordingDir       string
 	maxHistoryDumpSize int64
 	tracer             *debug.Tracer
+	dataReady          chan string // session IDs with new output; nil disables fast path
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -191,6 +198,7 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		recordingDir:       "",
 		maxHistoryDumpSize: 0,
 		tracer:             nil,
+		dataReady:          make(chan string, 256),
 	}
 
 	for _, o := range opts {
@@ -239,6 +247,17 @@ func (d *Daemon) Start(ctx context.Context) error {
 			SessionID: id,
 			Payload:   map[string]any{"exit_code": exitCode},
 		})
+	})
+
+	// Register fast-path notifier so the broadcaster wakes up immediately
+	// after a batcher flush, instead of waiting for its 16ms ticker.
+	// Non-blocking send so the batcher goroutine never stalls on a full
+	// channel; the ticker fallback in broadcastOutput catches any drops.
+	d.sessionSvc.OnDataReady(func(id string) {
+		select {
+		case d.dataReady <- id:
+		default:
+		}
 	})
 
 	d.server.OnClient(func(c ConnectedClient) {
@@ -653,8 +672,11 @@ func (d *Daemon) detachClient(clientID string) {
 	}
 }
 
-// broadcastOutput polls every session for new output and sends MsgData
-// frames to all attached clients at broadcastInterval.
+// broadcastOutput watches for session output and sends MsgData frames to
+// attached clients. It wakes up either on the dataReady fast-path signal
+// (fired immediately after a batcher flush) or on the broadcastInterval
+// ticker (fallback for any signals dropped by a full channel, and for
+// idle correctness).
 func (d *Daemon) broadcastOutput(ctx context.Context) {
 	ticker := time.NewTicker(broadcastInterval)
 	defer ticker.Stop()
@@ -663,10 +685,64 @@ func (d *Daemon) broadcastOutput(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case sessID := <-d.dataReady:
+			d.flushSessionOutput(sessID)
 		case <-ticker.C:
 			d.flushOutput()
 		}
 	}
+}
+
+// flushSessionOutput reads and broadcasts pending output for a single
+// session. Used by the dataReady fast-path. Equivalent to flushOutput
+// but scoped to one session ID, which is the common case after a batcher
+// signal.
+func (d *Daemon) flushSessionOutput(sessID string) {
+	d.mu.RLock()
+	clientSet, attached := d.attachments[sessID]
+	clients := make(map[string]struct{}, len(clientSet))
+	for id := range clientSet {
+		clients[id] = struct{}{}
+	}
+	d.mu.RUnlock()
+
+	if !attached || len(clients) == 0 {
+		// Still need to drain the buffer for waiters/persistence even
+		// without attached clients; defer to flushOutput's slow path.
+		d.flushOutput()
+		return
+	}
+
+	data, err := d.sessionSvc.ReadOutput(sessID)
+	if err != nil || len(data) == 0 {
+		return
+	}
+
+	d.scanOSC(sessID, data)
+	d.scanDA(sessID, data)
+	d.persistOutput(sessID, data)
+	d.teeRecording(sessID, data)
+	d.notifyOutputWaiters(sessID, data)
+
+	payload, payloadHandle := AcquireDataPayload(sessID, data)
+	frame := protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgData,
+		Payload: payload,
+	}
+
+	for clientID := range clients {
+		_ = d.server.BroadcastTo(clientID, frame)
+		if d.tracer.Enabled() {
+			d.tracer.Emit(debug.Event{
+				SessionID: sessID,
+				Stage:     debug.StageFrameSend,
+				Seq:       -1,
+				ByteLen:   len(data),
+			})
+		}
+	}
+	ReleaseDataPayload(payloadHandle)
 }
 
 // flushOutput reads pending output from every session and broadcasts it to
