@@ -1,0 +1,25 @@
+experiments/worklog.md
+  708d4865456e3d86 149-205,208-212
+autoresearch.jsonl
+  708d4865456e3d86 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8af258c8d87d9970a6111b1e6ff1d48578cb7913",
+  "prompts": {
+    "708d4865456e3d86": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fdf01a3-8d80-4bd1-a14f-f30ad148f52e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 63,
+      "total_deletions": 8,
+      "accepted_lines": 63,
+      "overriden_lines": 0
+    }
+  }
+}
