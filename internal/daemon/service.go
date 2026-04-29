@@ -697,7 +697,7 @@ func (d *Daemon) flushOutput() {
 		d.teeRecording(sessID, data)
 		d.notifyOutputWaiters(sessID, data)
 
-		payload := EncodeDataPayload(sessID, data)
+		payload, payloadHandle := AcquireDataPayload(sessID, data)
 		frame := protocol.Frame{
 			Version: protocol.ProtocolVersion,
 			Type:    protocol.MsgData,
@@ -715,6 +715,7 @@ func (d *Daemon) flushOutput() {
 				})
 			}
 		}
+		ReleaseDataPayload(payloadHandle)
 	}
 
 	// Flush output for sessions with active waiters but no attached clients.

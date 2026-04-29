@@ -1,9 +1,22 @@
 package daemon
 
-import "errors"
+import (
+	"errors"
+	"sync"
+)
 
 // ErrPayloadTooShort is returned when a binary payload cannot be decoded.
 var ErrPayloadTooShort = errors.New("daemon: payload too short")
+
+// dataPayloadPool reuses payload buffers across MsgData broadcast frames.
+// Released slices have their backing array reused; callers must hold the
+// slice only between Acquire and Release.
+var dataPayloadPool = sync.Pool{
+	New: func() any {
+		s := make([]byte, 0, 64*1024)
+		return &s
+	},
+}
 
 // EncodeDataPayload encodes a session ID and data into a binary payload
 // for MsgData frames: [session_id_len:1][session_id:N][data:rest].
@@ -14,6 +27,32 @@ func EncodeDataPayload(sessionID string, data []byte) []byte {
 	payload = append(payload, idBytes...)
 	payload = append(payload, data...)
 	return payload
+}
+
+// AcquireDataPayload returns a pooled buffer encoded with the same layout as
+// EncodeDataPayload. The returned slice is borrowed from a pool — callers
+// MUST call ReleaseDataPayload(handle) when done (typically after broadcast).
+// Encode is synchronous so releasing after the broadcast loop is safe.
+//
+// The handle is the *[]byte taken from the pool; pass it back to release.
+func AcquireDataPayload(sessionID string, data []byte) (payload []byte, handle *[]byte) {
+	bufPtr := dataPayloadPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0]
+	buf = append(buf, byte(len(sessionID)))
+	buf = append(buf, sessionID...)
+	buf = append(buf, data...)
+	*bufPtr = buf
+	return buf, bufPtr
+}
+
+// ReleaseDataPayload returns the buffer acquired via AcquireDataPayload to
+// the pool. Safe to call with nil; callers should still avoid passing nil.
+func ReleaseDataPayload(handle *[]byte) {
+	if handle == nil {
+		return
+	}
+	*handle = (*handle)[:0]
+	dataPayloadPool.Put(handle)
 }
 
 // DecodeDataPayload decodes a binary payload from a MsgData frame.
