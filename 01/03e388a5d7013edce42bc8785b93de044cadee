@@ -1,0 +1,25 @@
+internal/daemon/bench_test.go
+  708d4865456e3d86 1-43
+internal/session/bench_test.go
+  708d4865456e3d86 1-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0103e388a5d7013edce42bc8785b93de044cadee",
+  "prompts": {
+    "708d4865456e3d86": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fdf01a3-8d80-4bd1-a14f-f30ad148f52e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 437,
+      "total_deletions": 45,
+      "accepted_lines": 397,
+      "overriden_lines": 0
+    }
+  }
+}
