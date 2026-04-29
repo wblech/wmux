@@ -1,0 +1,25 @@
+internal/daemon/values.go
+  708d4865456e3d86 3-6,11-20,32-55
+internal/daemon/service.go
+  708d4865456e3d86 700,718
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8a77f23a0573854750f4da23bebb439db5687113",
+  "prompts": {
+    "708d4865456e3d86": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fdf01a3-8d80-4bd1-a14f-f30ad148f52e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 235,
+      "overriden_lines": 0
+    }
+  }
+}
