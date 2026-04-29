@@ -1,0 +1,25 @@
+internal/session/batcher.go
+  708d4865456e3d86 11-16,30-33,35-41,53-59,67-69,73-81
+internal/session/bench_test.go
+  708d4865456e3d86 81-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "6126a0de47e31a28b3068da93ebe5fed41c42c0e",
+  "prompts": {
+    "708d4865456e3d86": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fdf01a3-8d80-4bd1-a14f-f30ad148f52e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 160,
+      "total_deletions": 22,
+      "accepted_lines": 160,
+      "overriden_lines": 0
+    }
+  }
+}
