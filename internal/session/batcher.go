@@ -8,6 +8,12 @@ import (
 // minBatchInterval is the smallest allowed flush interval.
 const minBatchInterval = time.Millisecond
 
+// defaultFlushThreshold is the buffer size at which Add will trigger an
+// immediate flush instead of waiting for the next ticker. Sized to roughly
+// match the PTY readChunkSize so a single hot read does not stall behind the
+// 16 ms timer when a burst arrives.
+const defaultFlushThreshold = 32 * 1024
+
 // flushBufPool reuses []byte buffers handed to onFlush callbacks.
 // Contract: the slice passed to onFlush is only valid for the duration of the
 // call. Callers must copy if they need to retain it. Both production callers
@@ -21,13 +27,18 @@ var flushBufPool = sync.Pool{
 
 // Batcher accumulates bytes and flushes them to a callback on a configurable interval.
 // It runs an internal goroutine that drives timer-based flushes.
+//
+// In addition to the timer, Batcher signals an immediate flush when the
+// pending buffer grows past flushThreshold. This bounds the worst-case
+// latency on bursts to the threshold size, not the timer interval.
 type Batcher struct {
-	mu       sync.Mutex
-	buf      []byte
-	interval time.Duration
-	onFlush  func([]byte)
-	done     chan struct{}
-	flush    chan struct{}
+	mu             sync.Mutex
+	buf            []byte
+	interval       time.Duration
+	flushThreshold int
+	onFlush        func([]byte)
+	done           chan struct{}
+	flush          chan struct{}
 }
 
 // newBatcher creates a Batcher that calls onFlush with accumulated data at the given interval.
@@ -39,12 +50,13 @@ func newBatcher(interval time.Duration, onFlush func([]byte)) *Batcher {
 	}
 
 	b := &Batcher{
-		mu:       sync.Mutex{},
-		buf:      nil,
-		interval: interval,
-		onFlush:  onFlush,
-		done:     make(chan struct{}),
-		flush:    make(chan struct{}, 1),
+		mu:             sync.Mutex{},
+		buf:            nil,
+		interval:       interval,
+		flushThreshold: defaultFlushThreshold,
+		onFlush:        onFlush,
+		done:           make(chan struct{}),
+		flush:          make(chan struct{}, 1),
 	}
 
 	go b.loop()
@@ -52,12 +64,21 @@ func newBatcher(interval time.Duration, onFlush func([]byte)) *Batcher {
 	return b
 }
 
-// Add appends data to the current batch.
+// Add appends data to the current batch. If the buffer grows past
+// flushThreshold, Add signals an immediate flush so bursts do not stall
+// behind the next timer tick.
 func (b *Batcher) Add(data []byte) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	b.buf = append(b.buf, data...)
+	overThreshold := b.flushThreshold > 0 && len(b.buf) >= b.flushThreshold
+	b.mu.Unlock()
+
+	if overThreshold {
+		select {
+		case b.flush <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // FlushNow triggers an immediate flush outside of the normal interval.

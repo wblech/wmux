@@ -78,6 +78,76 @@ func storeFlushSink(data []byte) {
 	flushSinkLen = len(data)
 }
 
+// BenchmarkBatcherBurstLatency measures the wall-clock time between Add and
+// the onFlush callback firing, with the production timer interval (16 ms).
+//
+// Without a size threshold, this would average ~8 ms (half the timer
+// interval). With the size threshold, a burst that exceeds the threshold
+// flushes immediately and the latency drops to scheduling overhead.
+func BenchmarkBatcherBurstLatency(b *testing.B) {
+	// Burst chunk size deliberately larger than defaultFlushThreshold so a
+	// single Add crosses the threshold.
+	const burstChunkSize = 64 * 1024
+
+	chunk := make([]byte, burstChunkSize)
+	for i := range chunk {
+		chunk[i] = 0x41
+	}
+
+	flushed := make(chan struct{}, 1024)
+	batcher := newBatcher(16*time.Millisecond, func(_ []byte) {
+		select {
+		case flushed <- struct{}{}:
+		default:
+		}
+	})
+	defer batcher.Stop()
+
+	b.SetBytes(int64(burstChunkSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Drain any stale signal from prior iteration.
+		select {
+		case <-flushed:
+		default:
+		}
+		batcher.Add(chunk)
+		<-flushed
+	}
+}
+
+// BenchmarkBatcherSubThresholdLatency measures latency when each Add stays
+// below the size threshold. Should remain ~8 ms (half the timer interval)
+// — the size threshold must NOT shorten timer-driven flushes.
+func BenchmarkBatcherSubThresholdLatency(b *testing.B) {
+	// 1 KB is well under the 32 KB threshold.
+	const smallChunkSize = 1024
+
+	chunk := make([]byte, smallChunkSize)
+
+	flushed := make(chan struct{}, 1024)
+	batcher := newBatcher(16*time.Millisecond, func(_ []byte) {
+		select {
+		case flushed <- struct{}{}:
+		default:
+		}
+	})
+	defer batcher.Stop()
+
+	b.SetBytes(int64(smallChunkSize))
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		select {
+		case <-flushed:
+		default:
+		}
+		batcher.Add(chunk)
+		<-flushed
+	}
+}
+
 // BenchmarkBufferWriteRead measures the cost of a Write→Read cycle on the
 // backpressure Buffer with the tracer disabled (production-typical).
 func BenchmarkBufferWriteRead(b *testing.B) {
