@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/wblech/wmux/addons/charmvt"
+	"github.com/wblech/wmux/internal/cmdlifecycle"
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/event"
@@ -22,6 +23,13 @@ import (
 	"github.com/wblech/wmux/internal/transport"
 	"github.com/wblech/wmux/pkg/client"
 )
+
+// discardCmdRepo is a no-op Repository used by the E2E test daemon.
+// OSC 133 events flow through cmdlifecycle.Service but are not persisted —
+// persistence is unit-tested separately.
+type discardCmdRepo struct{}
+
+func (discardCmdRepo) Save(_ string, _ cmdlifecycle.SessionState) {}
 
 // testDaemonEnv holds the running daemon and its connection metadata.
 type testDaemonEnv struct {
@@ -57,10 +65,13 @@ func startTestDaemon(t *testing.T) *testDaemonEnv {
 	svc := session.NewService(spawner)
 	bus := event.NewBus()
 
+	cmdSvc := cmdlifecycle.NewService(discardCmdRepo{})
+
 	d := daemon.NewDaemon(
 		&serverAdapter{srv: srv},
 		&sessionAdapter{svc: svc},
 		daemon.WithEventBus(bus),
+		daemon.WithCommandLifecycle(cmdSvc),
 	)
 
 	ctx, cancel := context.WithCancel(context.Background())
