@@ -1,0 +1,25 @@
+docs/architecture/domains.md
+  735fa0269df98449 3,98-136,147
+docs/integration/events.md
+  735fa0269df98449 73-105
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "14de7cb49ee43b7128b8432d58ba06302b96b170",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 74,
+      "total_deletions": 1,
+      "accepted_lines": 74,
+      "overriden_lines": 0
+    }
+  }
+}
