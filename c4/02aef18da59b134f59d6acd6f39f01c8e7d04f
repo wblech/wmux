@@ -1,0 +1,23 @@
+internal/platform/commands/writer.go
+  735fa0269df98449 64-67,146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c402aef18da59b134f59d6acd6f39f01c8e7d04f",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 19,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
