@@ -1,0 +1,23 @@
+decisions/0033-osc133-shell-integration.md
+  735fa0269df98449 1-220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1b2e34763cea5398b82d9373fb81083c17b36b9c",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 281,
+      "total_deletions": 61,
+      "accepted_lines": 220,
+      "overriden_lines": 0
+    }
+  }
+}
