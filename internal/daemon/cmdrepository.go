@@ -29,6 +29,15 @@ func newCmdRepository(coldRestoreEnabled bool) *cmdRepository {
 	}
 }
 
+// NewCmdRepository returns a cmdlifecycle.Repository suitable for passing
+// to cmdlifecycle.NewService when the daemon is constructed externally
+// (e.g., from pkg/client.Serve). When coldRestoreEnabled is false, the
+// repository drops Save calls so cmdlifecycle still tracks state in
+// memory but nothing is persisted to disk.
+func NewCmdRepository(coldRestoreEnabled bool) cmdlifecycle.Repository {
+	return newCmdRepository(coldRestoreEnabled)
+}
+
 // Open creates a Writer for the session at the given path. If cold-restore
 // is disabled, returns nil and stores nothing. Idempotent: re-opening an
 // existing session is a no-op.

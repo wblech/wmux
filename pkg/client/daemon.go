@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/wblech/wmux/internal/cmdlifecycle"
 	"github.com/wblech/wmux/internal/daemon"
 	"github.com/wblech/wmux/internal/platform/auth"
 	"github.com/wblech/wmux/internal/platform/debug"
@@ -93,6 +94,14 @@ func (d *Daemon) Serve(ctx context.Context) error {
 
 	pidFile := filepath.Join(filepath.Dir(d.cfg.socket), "wmux.pid")
 
+	// Wire the command-lifecycle service so OSC 133 sequences emitted by
+	// shells reach Service.HandleOSC and produce command.* events on the
+	// event bus. The repository persists per-session command history when
+	// cold-restore is enabled; otherwise it is a no-op writer and tracking
+	// is in-memory only.
+	cmdRepo := daemon.NewCmdRepository(d.cfg.coldRestore)
+	cmdSvc := cmdlifecycle.NewService(cmdRepo)
+
 	dd := daemon.NewDaemon(
 		&serverAdapter{srv: server},
 		&sessionAdapter{svc: sessionSvc},
@@ -101,6 +110,7 @@ func (d *Daemon) Serve(ctx context.Context) error {
 		daemon.WithVersion("0.1.0"),
 		daemon.WithEventBus(d.eventBus),
 		daemon.WithColdRestore(d.cfg.coldRestore),
+		daemon.WithCommandLifecycle(cmdSvc),
 		daemon.WithMaxScrollbackSize(d.cfg.maxScrollbackSize),
 		daemon.WithTracer(tracer),
 	)
