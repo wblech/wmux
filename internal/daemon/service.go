@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -924,9 +925,27 @@ func (d *Daemon) handleSubscribe(c ConnectedClient, frame protocol.Frame) {
 	}()
 }
 
-// scanOSC inspects output data for OSC sequences and emits events / updates metadata.
+// scanOSC inspects output data for OSC sequences and dispatches:
+//   - OSC 7 → updates session metadata + emits CwdChanged
+//   - OSC 9/99/777 → emits Notification or ShellReady
+//   - OSC 133 → cmdSvc.HandleOSC with offset-derived row
+//
+// The newline counter for row tracking is updated lazily — only the
+// prefix between markers is counted, plus the tail after the last match.
+// Cross-chunk invariant: after this function returns, the counter
+// reflects the cumulative newline count across all bytes ever scanned
+// for the session.
 func (d *Daemon) scanOSC(sessID string, data []byte) {
 	results := ParseOSC(data)
+	if len(results) == 0 {
+		return // hot path: zero work for chunks without OSC sequences
+	}
+
+	d.lineCountersMu.RLock()
+	counter := d.lineCounters[sessID]
+	d.lineCountersMu.RUnlock()
+
+	cursor := 0
 	for _, osc := range results {
 		switch osc.Type {
 		case OSCTypeCwd:
@@ -948,8 +967,49 @@ func (d *Daemon) scanOSC(sessID string, data []byte) {
 				SessionID: sessID,
 				Payload:   map[string]any{},
 			})
+		case OSCType133:
+			// Lazy: count newlines only over the prefix between the
+			// previous marker and this one. Cross-chunk correctness is
+			// ensured by the tail-count after the loop.
+			if counter != nil {
+				counter.Add(int64(bytes.Count(data[cursor:osc.Offset], []byte{'\n'})))
+				cursor = osc.Offset
+			}
+			row := int64(0)
+			if counter != nil {
+				row = counter.Load()
+			}
+			code, exit := parseOSC133Value(osc.Value)
+			if d.cmdSvc != nil {
+				_ = d.cmdSvc.HandleOSC(sessID, code, exit, row)
+			}
 		}
 	}
+
+	// Tail: count newlines after the last match. REQUIRED for cross-chunk
+	// accuracy — without this, the next chunk's first OSC 133 marker would
+	// see a stale row number missing this chunk's tail newlines.
+	if counter != nil && cursor < len(data) {
+		counter.Add(int64(bytes.Count(data[cursor:], []byte{'\n'})))
+	}
+}
+
+// parseOSC133Value extracts the code byte and exit code from an OSC 133
+// payload string. The payload is the part after "133;" — e.g. "A",
+// "D;42", "D;0;extra".
+func parseOSC133Value(v string) (code byte, exit int) {
+	if len(v) == 0 {
+		return 0, 0
+	}
+	code = v[0]
+	if code == 'D' && len(v) > 2 {
+		rest := v[2:] // skip "D;"
+		if semi := strings.IndexByte(rest, ';'); semi >= 0 {
+			rest = rest[:semi]
+		}
+		exit, _ = strconv.Atoi(rest)
+	}
+	return code, exit
 }
 
 // scanDA inspects output for DA1/DA2 device attribute requests and, when the
