@@ -17,12 +17,18 @@ const (
 	OSCTypeNotification
 	// OSCTypeShellReady indicates a wmux shell-ready marker (OSC 777;wmux;shell-ready).
 	OSCTypeShellReady
+	// OSCType133 indicates an OSC 133 shell-integration marker
+	// (A = prompt, B = user input, C = command, D = exit).
+	OSCType133
 )
 
 // OSCResult holds a parsed OSC sequence.
 type OSCResult struct {
 	Type  OSCType
 	Value string
+	// Offset is the byte position of the ESC ] introducer in the original
+	// data slice. Used by scanOSC for offset-aware row tracking.
+	Offset int
 }
 
 // oscIntroducer is the byte pair that starts an OSC sequence: ESC ].
@@ -31,46 +37,34 @@ var oscIntroducer = []byte{0x1b, ']'}
 // oscTerminatorST is the ANSI string terminator: ESC \.
 var oscTerminatorST = []byte{0x1b, '\\'}
 
-// ParseOSC scans data for OSC sequences (7, 9, 99, 777) and returns parsed results.
-// This is a passive scanner — it does not modify the data.
+// ParseOSC scans data for OSC sequences (7, 9, 99, 133, 777) and returns
+// parsed results in source order. Each result includes the byte offset of
+// its ESC ] introducer in data, enabling callers to compute positions
+// (e.g. row counts) relative to each match.
 //
-// Operates directly on []byte without converting to string; for the common
-// case of PTY output without any OSC sequences this avoids allocating a
-// copy of the entire chunk just to scan over it. Only the OSC body content
-// is converted to string when a match is found, since OSCResult.Value is
-// a string.
+// Allocation: returns nil when no OSC sequences are found. The
+// no-match path is gated by BenchmarkParseOSC_NoOSC at 0 allocs/op.
 func ParseOSC(data []byte) []OSCResult {
 	var results []OSCResult
-	s := data
+	cursor := 0
 
 	for {
-		idx := bytes.Index(s, oscIntroducer)
+		idx := bytes.Index(data[cursor:], oscIntroducer)
 		if idx < 0 {
 			break
 		}
-		s = s[idx+2:]
+		matchStart := cursor + idx
+		cursor = matchStart + 2
 
-		endST := bytes.Index(s, oscTerminatorST)
-		endBEL := bytes.IndexByte(s, 0x07)
-
-		end := -1
-		switch {
-		case endST >= 0 && endBEL >= 0 && endST < endBEL:
-			end = endST
-		case endST >= 0 && endBEL >= 0:
-			end = endBEL
-		case endST >= 0:
-			end = endST
-		case endBEL >= 0:
-			end = endBEL
-		}
-
+		endST := bytes.Index(data[cursor:], oscTerminatorST)
+		endBEL := bytes.IndexByte(data[cursor:], 0x07)
+		end := pickOSCEnd(endST, endBEL)
 		if end < 0 {
 			break
 		}
-
-		body := s[:end]
-		s = s[end+1:]
+		bodyEnd := cursor + end
+		body := data[cursor:bodyEnd]
+		cursor = bodyEnd + 1
 
 		semicolon := bytes.IndexByte(body, ';')
 		if semicolon < 0 {
@@ -83,22 +77,43 @@ func ParseOSC(data []byte) []OSCResult {
 		case "7":
 			parsed, err := url.Parse(oscValue)
 			if err == nil && parsed.Path != "" {
-				results = append(results, OSCResult{Type: OSCTypeCwd, Value: parsed.Path})
+				results = append(results, OSCResult{
+					Type:   OSCTypeCwd,
+					Value:  parsed.Path,
+					Offset: matchStart,
+				})
 			}
 		case "9":
-			results = append(results, OSCResult{Type: OSCTypeNotification, Value: oscValue})
+			results = append(results, OSCResult{
+				Type:   OSCTypeNotification,
+				Value:  oscValue,
+				Offset: matchStart,
+			})
 		case "99":
 			parts := strings.SplitN(oscValue, ";", 2)
 			val := oscValue
 			if len(parts) == 2 {
 				val = parts[1]
 			}
-			results = append(results, OSCResult{Type: OSCTypeNotification, Value: val})
+			results = append(results, OSCResult{
+				Type:   OSCTypeNotification,
+				Value:  val,
+				Offset: matchStart,
+			})
+		case "133":
+			results = append(results, OSCResult{
+				Type:   OSCType133,
+				Value:  oscValue,
+				Offset: matchStart,
+			})
 		case "777":
 			parts := strings.SplitN(oscValue, ";", 3)
-			// Detect wmux shell-ready marker: 777;wmux;shell-ready
 			if len(parts) >= 2 && parts[0] == "wmux" && parts[1] == "shell-ready" {
-				results = append(results, OSCResult{Type: OSCTypeShellReady, Value: "shell-ready"})
+				results = append(results, OSCResult{
+					Type:   OSCTypeShellReady,
+					Value:  "shell-ready",
+					Offset: matchStart,
+				})
 				continue
 			}
 			val := oscValue
@@ -107,9 +122,29 @@ func ParseOSC(data []byte) []OSCResult {
 			} else if len(parts) == 2 {
 				val = parts[1]
 			}
-			results = append(results, OSCResult{Type: OSCTypeNotification, Value: val})
+			results = append(results, OSCResult{
+				Type:   OSCTypeNotification,
+				Value:  val,
+				Offset: matchStart,
+			})
 		}
 	}
 
 	return results
+}
+
+// pickOSCEnd selects the earlier non-negative terminator index.
+// Refactored from the inline switch in ParseOSC.
+func pickOSCEnd(endST, endBEL int) int {
+	switch {
+	case endST >= 0 && endBEL >= 0 && endST < endBEL:
+		return endST
+	case endST >= 0 && endBEL >= 0:
+		return endBEL
+	case endST >= 0:
+		return endST
+	case endBEL >= 0:
+		return endBEL
+	}
+	return -1
 }

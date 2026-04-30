@@ -81,7 +81,7 @@ func TestParseOSC_ShellReady(t *testing.T) {
 		{
 			name:  "shell-ready embedded in other output",
 			input: "prompt$ \x1b]777;wmux;shell-ready\x1b\\more output",
-			want:  []OSCResult{{Type: OSCTypeShellReady, Value: "shell-ready"}},
+			want:  []OSCResult{{Type: OSCTypeShellReady, Value: "shell-ready", Offset: 8}},
 		},
 	}
 	for _, tc := range tests {
@@ -89,5 +89,26 @@ func TestParseOSC_ShellReady(t *testing.T) {
 			results := ParseOSC([]byte(tc.input))
 			assert.Equal(t, tc.want, results)
 		})
+	}
+}
+
+func TestParseOSC_OffsetAccuracy(t *testing.T) {
+	data := []byte("abc\x1b]7;file:///tmp/x\x1b\\xyz\x1b]9;hello\x07")
+	results := ParseOSC(data)
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2", len(results))
+	}
+	if results[0].Offset != 3 {
+		t.Errorf("results[0].Offset = %d, want 3", results[0].Offset)
+	}
+	if results[1].Offset <= results[0].Offset {
+		t.Errorf("offsets must be strictly increasing: %d, %d", results[0].Offset, results[1].Offset)
+	}
+}
+
+func TestParseOSC_NoMatch_ReturnsNil(t *testing.T) {
+	results := ParseOSC([]byte("plain text without any OSC"))
+	if results != nil {
+		t.Errorf("results = %v, want nil", results)
 	}
 }

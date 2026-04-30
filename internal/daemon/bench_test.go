@@ -70,6 +70,24 @@ func BenchmarkParseOSC_WithOSC(b *testing.B) {
 	_ = sinkLen
 }
 
+// TestBenchmarkParseOSC_NoOSC_ZeroAllocs is an explicit allocation gate
+// for the no-match path. ADR 0032 / Task 10 of OSC 133 plan: ParseOSC
+// must remain 0 allocs/op when scanning chunks without OSC sequences.
+func TestBenchmarkParseOSC_NoOSC_ZeroAllocs(t *testing.T) {
+	const chunkSize = 32 * 1024
+	data := make([]byte, chunkSize)
+	for i := range data {
+		data[i] = byte('a' + (i % 26))
+	}
+
+	allocs := testing.AllocsPerRun(100, func() {
+		_ = ParseOSC(data)
+	})
+	if allocs > 0 {
+		t.Errorf("ParseOSC no-match allocs/op = %f, want 0 (regression gate)", allocs)
+	}
+}
+
 // BenchmarkAcquireDataPayload measures the pooled equivalent of
 // EncodeDataPayload. Acquire+release per call mirrors the broadcast loop.
 func BenchmarkAcquireDataPayload(b *testing.B) {
