@@ -190,23 +190,66 @@ across all 19 packages.
 
 **Verdict: KEPT.**
 
-## Cumulative wins (Runs 1–4)
+## Run 5 — E9: ParseOSC zero-copy scan (2026-04-29)
+
+**Hypothesis.** `ParseOSC` did `s := string(data)` to enable
+`strings.Index`. That allocates a copy of the entire chunk (~32 KB)
+per call. Almost every PTY chunk contains no OSC sequences, so the
+copy is pure waste.
+
+**Change.** `internal/daemon/osc.go`:
+1. Switched scan from `strings.Index` on string copy to `bytes.Index`
+   directly on the chunk (`[]byte`).
+2. Stringification deferred to actual matches (small body slices only).
+3. Pre-allocated `oscIntroducer` and `oscTerminatorST` byte slice constants.
+
+**Results (32 KB chunk, 2 s benchtime, M3):**
+
+| Bench | Baseline | E9 | Δ |
+|---|---:|---:|---:|
+| ParseOSC_NoOSC (common case) | 2261 ns / 1 alloc / 32768 B | **433 ns / 0 alloc / 0 B** | **-81% / 5.2×** |
+| ParseOSC_WithOSC | 3638 ns / 3 allocs / 32960 B | 1640 ns / 4 allocs / 240 B | -55%; -99% memory |
+
+`WithOSC` allocs went up by 1 (now `string(oscNum)` for the switch on 2-3
+byte numerics) but memory dropped from 32960 B to 240 B — strict net win.
+
+**Correctness.** Full repo `go test ./... -race -shuffle=on -count=1` PASS.
+
+**Verdict: KEPT.**
+
+## Cumulative wins (Runs 1–5)
 
 | Stage | Baseline | After | Δ |
 |---|---|---|---:|
 | Batcher Add+Flush throughput | 4273 ns / 1 alloc | 2048 / 0 | -52% |
 | `doFlush` only | 2757 ns / 1 alloc | 967 / 0 | -65% / 2.8× |
 | Payload encode | 2997 ns / 1 alloc / 40 KB | 591 / 0 / 0 B | -80% / 5× |
+| **ParseOSC (no-match)** | 2261 ns / 1 alloc / 32 KB | 433 / 0 / 0 B | -81% / 5.2× |
 | Burst flush latency (batcher only) | ~16 ms | ~4 µs | ~3900× |
 | **End-to-end signal latency** | **~16 ms** | **~9 µs** | **~1800×** |
 
-Allocs on broadcast hot path: **3 → 1 per chunk**. Only `Buffer.Write`
-internal append remains.
+Allocs on broadcast hot path: **3 → 1 per chunk** (only `Buffer.Write`
+intrinsic append remains).
 
-## Next experiments (parked)
+## Audit of remaining hot-path candidates
 
-- **E3 — broadcastOutput skips idle sessions** (CPU at idle; separate
-  concern from latency, lower priority now that the latency wins are in).
-- **E6 — document Buffer.Read ownership** (ADR only; the code is already
-  zero-copy via slice swap).
+Surveyed the remaining 4 daemon scanners (`scanDA`, `persistOutput`,
+`teeRecording`, `notifyOutputWaiters`) — already byte-based and clean.
+
+Surveyed the input path (`handleInput` → `WriteInput`) — minimal, low
+volume, not worth optimizing.
+
+Surveyed the snapshot path — only runs on attach (cold path).
+
+`flushSessionOutput`'s per-call `make(map[string]struct{}, …)` snapshot
+allocates 1 map per signal. Could be pooled but is small (typical
+1 client) and amortizes against socket I/O.
+
+## Next experiments (parked, diminishing returns)
+
+- **E3 — broadcastOutput skips idle sessions** (now mostly mitigated by
+  the ticker being a fallback only; the fast path handles all real work).
+- Pool the client-snapshot slice in `flushSessionOutput` if profiling
+  ever flags it.
+- **E6 — document Buffer.Read ownership** (ADR only; code already zero-copy).
 - **E7/E8 — micro-tuning** of mutex/channel sizes (low ROI).
