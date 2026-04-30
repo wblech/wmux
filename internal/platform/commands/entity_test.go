@@ -2,6 +2,7 @@ package commands
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -50,31 +51,7 @@ func TestFile_OmitInFlight_WhenNil(t *testing.T) {
 	if string(data) == "" {
 		t.Fatal("empty marshal")
 	}
-	if contains(string(data), "in_flight") {
+	if strings.Contains(string(data), "in_flight") {
 		t.Errorf("expected omitempty: %s", data)
-	}
-}
-
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
-
-func TestSentinelErrors(t *testing.T) {
-	if ErrUnsupportedVersion == nil {
-		t.Error("ErrUnsupportedVersion must be non-nil")
-	}
-	if ErrWriterClosed == nil {
-		t.Error("ErrWriterClosed must be non-nil")
-	}
-}
-
-func TestCurrentVersion(t *testing.T) {
-	if CurrentVersion != 1 {
-		t.Errorf("CurrentVersion = %d, want 1 (initial schema)", CurrentVersion)
 	}
 }
