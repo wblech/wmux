@@ -70,6 +70,39 @@ c.OnEvent(func(evt client.Event) {
 | `output.flood` | Output rate exceeds flood threshold | -- |
 | `recording.limit_reached` | Recording file size limit reached | -- |
 | `shell.ready` | Shell has finished initializing | -- |
+| `command.prompt_shown` | Shell prompt was drawn (OSC 133;A). Fires per prompt. | `row` |
+| `command.started` | A user command began executing (OSC 133;C) | `started_at`, `start_row` |
+| `command.finished` | A command completed (OSC 133;D) or was closed as orphan | `started_at`, `ended_at`, `exit_code`, `start_row`, `end_row`, `duration_ms`, `orphan`, `orphan_reason` |
+
+### Shell Integration (OSC 133)
+
+The `command.*` events surface shell-level command boundaries, exposed by
+shells that emit OSC 133 markers (FinalTerm convention, also used by
+iTerm2, VS Code, WezTerm, Kitty). Configure your shell to emit these
+sequences around the prompt:
+
+- `OSC 133;A` — prompt drawn
+- `OSC 133;B` — user input started
+- `OSC 133;C` — command executing
+- `OSC 133;D;<exit>` — command finished
+
+Example bash setup:
+
+```bash
+PROMPT_COMMAND='__last=$?; printf "\x1b]133;D;%s\x07" "$__last"'
+PS1='\[\x1b]133;A\x07\]$ \[\x1b]133;B\x07\]'
+trap 'printf "\x1b]133;C\x07"' DEBUG
+```
+
+When a shell emits these markers, wmux dispatches `command.started` /
+`command.finished` events with timing, exit codes, and scrollback row
+positions. Command history is also persisted to `commands.json` per
+session when cold-restore is enabled.
+
+**Limitation:** Events fire only for sessions with at least one attached
+client (consistent with `cwd.changed` and other OSC-derived events). If
+durable command history matters, ensure a client stays attached. See
+[ADR 0033](../decisions/0033-osc133-shell-integration.md) for rationale.
 
 ## Event struct
 

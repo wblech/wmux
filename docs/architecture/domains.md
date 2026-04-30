@@ -1,6 +1,6 @@
 # Domain Packages
 
-wmux has three domain packages under `internal/`. Each domain is a
+wmux has four domain packages under `internal/`. Each domain is a
 self-contained bounded context that owns its entities, business rules, and
 repository interfaces. Domains never import each other; they communicate
 through interfaces wired by fx at startup.
@@ -95,6 +95,45 @@ daemon:
 
 ---
 
+## cmdlifecycle
+
+Pure-logic state machine that tracks per-session command lifecycle from
+OSC 133 shell-integration markers. Has no I/O; persistence is delegated
+to a `Repository` interface implemented by the daemon.
+
+### Responsibilities
+
+- Maintains per-session state machine (Idle → PromptShown → UserTyping →
+  CommandRunning) driven by OSC 133;A/B/C/D markers
+- Records completed commands in a FIFO history (default cap 500/session)
+- Detects orphaned commands (missing OSC 133;D) and tags them with a
+  reason
+- Emits lifecycle events (`PromptShown`, `CommandStarted`,
+  `CommandFinished`) via a global handler registered by the daemon
+- Provides `Snapshot` and `Restore` for cold-restore round-trips
+
+### Key types
+
+- `Service` — singleton; holds the per-session tracker map and the
+  registered event handler. Constructed via `NewService(repo, opts...)`
+  with `WithMaxHistory` and `WithClock` options.
+- `Command` — closed command record (timestamps, exit code, row range,
+  optional orphan flag and reason).
+- `SessionState` — Snapshot/Restore payload (`History` + optional
+  `InFlight`).
+- `Repository` — `Save(sessID, state)` interface; daemon implements via
+  `commands.Writer`.
+
+### Boundary
+
+Only stdlib + `go.uber.org/fx` allowed. No imports of other domains. No
+filesystem or network I/O. Pure-logic testable to ≥95% coverage.
+
+See [ADR 0033](../decisions/0033-osc133-shell-integration.md) for
+design rationale.
+
+---
+
 # Platform Packages
 
 Platform packages live under `internal/platform/` and provide shared
@@ -105,6 +144,7 @@ concepts and can be reused independently.
 |-----------|-------------|
 | `ansi` | ANSI escape code parser. Interprets CSI, OSC, and other control sequences from raw terminal output. |
 | `auth` | Token-based authentication. Generates and validates 32-byte cryptographically random tokens for client-daemon handshakes. |
+| `commands` | Per-session command-history persistence. Stores `commands.json` (debounced writes via atomic tmpfile + rename) alongside `scrollback.bin`. Schema is forward-compatible via a `version` field. |
 | `config` | TOML configuration loading with hot-reload support. Built on koanf, watches config files for changes and notifies subscribers. |
 | `event` | Domain event bus implementing publish/subscribe. Allows domains to react to events from other domains without direct imports. |
 | `history` | Scrollback persistence. Stores terminal scrollback in a binary format (`scrollback.bin`) with a companion metadata file (`meta.json`). |
