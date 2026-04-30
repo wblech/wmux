@@ -1,0 +1,31 @@
+internal/daemon/values_test.go
+  4e0014766e568926 41-85
+Makefile
+  4e0014766e568926 1,18-23
+internal/session/options_test.go
+  4e0014766e568926 4-5,7,10,23-76
+internal/session/batcher_test.go
+  4e0014766e568926 158-274
+decisions/0031-event-driven-broadcast-and-burst-flush.md
+  4e0014766e568926 1-152
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1a84900214ca18a2384cacc08bc01805bfe68ede",
+  "prompts": {
+    "4e0014766e568926": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbb4f910-6a03-45af-9327-f5398b9c350f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 381,
+      "total_deletions": 3,
+      "accepted_lines": 379,
+      "overriden_lines": 0
+    }
+  }
+}
