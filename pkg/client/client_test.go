@@ -325,6 +325,36 @@ func TestClient_Attach(t *testing.T) {
 	assert.Equal(t, []byte("\x1b[2J\x1b[Hreplay-data"), result.Snapshot.Replay)
 }
 
+func TestClient_Attach_PopulatesCommandHistory(t *testing.T) {
+	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
+		protocol.MsgAttach: func(_ []byte) protocol.Frame {
+			payload := []byte(`{
+				"id":"s1","state":"running","pid":42,"cols":80,"rows":24,"shell":"/bin/zsh",
+				"command_history":[
+					{"started_at":"2026-04-30T10:00:00Z","ended_at":"2026-04-30T10:00:01Z","exit_code":0,"start_row":5,"end_row":7,"duration_ms":1000}
+				],
+				"in_flight_command":{"started_at":"2026-04-30T10:00:02Z","start_row":10,"end_row":10,"exit_code":0,"duration_ms":0}
+			}`)
+			return protocol.Frame{Version: protocol.ProtocolVersion, Type: protocol.MsgOK, Payload: payload}
+		},
+	})
+	defer cleanup()
+
+	c, err := New(WithSocket(socketPath), WithTokenPath(tokenPath), WithAutoStart(false))
+	require.NoError(t, err)
+	defer c.Close() //nolint:errcheck
+
+	result, err := c.Attach("s1")
+	require.NoError(t, err)
+	require.Len(t, result.CommandHistory, 1)
+	assert.Equal(t, 0, result.CommandHistory[0].ExitCode)
+	assert.Equal(t, int64(7), result.CommandHistory[0].EndRow)
+	assert.Equal(t, int64(1000), result.CommandHistory[0].DurationMs)
+
+	require.NotNil(t, result.InFlightCommand)
+	assert.Equal(t, int64(10), result.InFlightCommand.StartRow)
+}
+
 func TestClient_Attach_NoSnapshot(t *testing.T) {
 	socketPath, tokenPath, _, cleanup := startMockServerWithHandlers(t, map[protocol.MessageType]handlerFunc{
 		protocol.MsgAttach: func(_ []byte) protocol.Frame {

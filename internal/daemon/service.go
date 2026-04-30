@@ -580,13 +580,15 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 	d.mu.Unlock()
 
 	resp := AttachResponse{
-		ID:       info.ID,
-		State:    info.State,
-		Pid:      info.Pid,
-		Cols:     info.Cols,
-		Rows:     info.Rows,
-		Shell:    info.Shell,
-		Snapshot: nil,
+		ID:              info.ID,
+		State:           info.State,
+		Pid:             info.Pid,
+		Cols:            info.Cols,
+		Rows:            info.Rows,
+		Shell:           info.Shell,
+		Snapshot:        nil,
+		CommandHistory:  []CommandResponse{},
+		InFlightCommand: nil,
 	}
 
 	if d.tracer.Enabled() {
@@ -619,6 +621,20 @@ func (d *Daemon) handleAttach(c ConnectedClient, frame protocol.Frame) {
 
 	if snapErr == nil && len(snap.Replay) > 0 {
 		resp.Snapshot = &SnapshotResponse{Replay: snap.Replay}
+	}
+
+	if d.cmdSvc != nil {
+		if state, err := d.cmdSvc.Snapshot(req.SessionID); err == nil {
+			history := make([]CommandResponse, len(state.History))
+			for i, c := range state.History {
+				history[i] = commandToResponse(c)
+			}
+			resp.CommandHistory = history
+			if state.InFlight != nil {
+				cr := commandToResponse(*state.InFlight)
+				resp.InFlightCommand = &cr
+			}
+		}
 	}
 
 	_ = c.Control().WriteFrame(okFrame(resp))
@@ -1870,5 +1886,24 @@ func (d *Daemon) restoreCommandHistoriesAtStartup() {
 			path := filepath.Join(d.dataDir, sessID, "commands.json")
 			_ = d.cmdRepo.Open(sessID, path)
 		}
+	}
+}
+
+// commandToResponse converts a cmdlifecycle.Command to its wire representation,
+// computing DurationMs from the start/end timestamps when the command has ended.
+func commandToResponse(c cmdlifecycle.Command) CommandResponse {
+	var durationMs int64
+	if !c.EndedAt.IsZero() {
+		durationMs = c.EndedAt.Sub(c.StartedAt).Milliseconds()
+	}
+	return CommandResponse{
+		StartedAt:    c.StartedAt,
+		EndedAt:      c.EndedAt,
+		ExitCode:     c.ExitCode,
+		StartRow:     c.StartRow,
+		EndRow:       c.EndRow,
+		DurationMs:   durationMs,
+		Orphan:       c.Orphan,
+		OrphanReason: c.OrphanReason,
 	}
 }

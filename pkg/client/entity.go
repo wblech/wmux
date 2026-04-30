@@ -1,6 +1,22 @@
 // Package client provides a Go client library for the wmux daemon.
 package client
 
+import "time"
+
+// Command is a command-lifecycle entry exposed by Attach. The shape
+// duplicates internal/cmdlifecycle.Command intentionally so the public
+// protocol can evolve independently of the internal state machine.
+type Command struct {
+	StartedAt    time.Time `json:"started_at"`
+	EndedAt      time.Time `json:"ended_at,omitempty"`
+	ExitCode     int       `json:"exit_code"`
+	StartRow     int64     `json:"start_row"`
+	EndRow       int64     `json:"end_row"`
+	DurationMs   int64     `json:"duration_ms"`
+	Orphan       bool      `json:"orphan,omitempty"`
+	OrphanReason string    `json:"orphan_reason,omitempty"`
+}
+
 // CreateParams holds parameters for creating a new session.
 type CreateParams struct {
 	// Shell is the path to the shell binary.
@@ -58,6 +74,10 @@ type AttachResult struct {
 	Session SessionInfo
 	// Snapshot is the terminal state (empty if backend is "none").
 	Snapshot Snapshot
+	// CommandHistory is the list of completed commands for this session.
+	CommandHistory []Command
+	// InFlightCommand is the currently-running command, or nil if none.
+	InFlightCommand *Command
 }
 
 // SessionHistory holds restored session data from disk (cold restore).

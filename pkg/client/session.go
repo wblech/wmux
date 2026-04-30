@@ -66,6 +66,8 @@ func (c *Client) Attach(sessionID string) (AttachResult, error) {
 		Snapshot *struct {
 			Replay []byte `json:"replay"`
 		} `json:"snapshot,omitempty"`
+		CommandHistory  []Command `json:"command_history"`
+		InFlightCommand *Command  `json:"in_flight_command,omitempty"`
 	}
 	if err := json.Unmarshal(resp.Payload, &attachResp); err != nil {
 		return AttachResult{}, fmt.Errorf("client: unmarshal attach: %w", err)
@@ -81,6 +83,8 @@ func (c *Client) Attach(sessionID string) (AttachResult, error) {
 			Rows:  attachResp.Rows,
 			Shell: attachResp.Shell,
 		},
+		CommandHistory:  attachResp.CommandHistory,
+		InFlightCommand: attachResp.InFlightCommand,
 	}
 	if attachResp.Snapshot != nil {
 		result.Snapshot = Snapshot{Replay: attachResp.Snapshot.Replay}

@@ -66,15 +66,30 @@ type EventSubscribeRequest struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+// CommandResponse is the JSON representation of a single shell command lifecycle
+// record, mirroring the client.Command struct to avoid a circular import.
+type CommandResponse struct {
+	StartedAt    time.Time `json:"started_at"`
+	EndedAt      time.Time `json:"ended_at,omitempty"`
+	ExitCode     int       `json:"exit_code"`
+	StartRow     int64     `json:"start_row"`
+	EndRow       int64     `json:"end_row"`
+	DurationMs   int64     `json:"duration_ms"`
+	Orphan       bool      `json:"orphan,omitempty"`
+	OrphanReason string    `json:"orphan_reason,omitempty"`
+}
+
 // AttachResponse is the JSON payload for MsgAttach responses with snapshot.
 type AttachResponse struct {
-	ID       string            `json:"id"`
-	State    string            `json:"state"`
-	Pid      int               `json:"pid"`
-	Cols     int               `json:"cols"`
-	Rows     int               `json:"rows"`
-	Shell    string            `json:"shell"`
-	Snapshot *SnapshotResponse `json:"snapshot,omitempty"`
+	ID              string            `json:"id"`
+	State           string            `json:"state"`
+	Pid             int               `json:"pid"`
+	Cols            int               `json:"cols"`
+	Rows            int               `json:"rows"`
+	Shell           string            `json:"shell"`
+	Snapshot        *SnapshotResponse `json:"snapshot,omitempty"`
+	CommandHistory  []CommandResponse `json:"command_history"`
+	InFlightCommand *CommandResponse  `json:"in_flight_command,omitempty"`
 }
 
 // SnapshotResponse carries the unified replay snapshot data.
