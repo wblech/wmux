@@ -1,0 +1,27 @@
+internal/session/bench_test.go
+  85ed52821c259bbd 206-256
+internal/session/service.go
+  85ed52821c259bbd 48-65,530,541-542,544,547-551,554,560,564-567,573,579,594-597,604,611,615
+autoresearch.jsonl
+  85ed52821c259bbd 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e69b72631781ad86214fd6f3c5b99c862c3af72c",
+  "prompts": {
+    "85ed52821c259bbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac80b0cc-2d04-439e-af9f-20870c1a22c0",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 102,
+      "total_deletions": 25,
+      "accepted_lines": 94,
+      "overriden_lines": 0
+    }
+  }
+}
