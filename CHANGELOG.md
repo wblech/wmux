@@ -2,6 +2,33 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.3.0](https://github.com/wblech/wmux/releases/tag/v0.3.0) - 2026-04-30
+
+### Bug Fixes
+
+- Remove flaky borrow-contract tests, doc strengthens contract *(test)*
+- Trailing newline in values_test.go (gofmt) *(test)*
+
+### Documentation
+
+- Add wmux autoresearch tracking files *(perf)*
+- Record E1 size-threshold experiment results *(perf)*
+- Record E2 timer-cascade experiment results *(perf)*
+- Record E9 ParseOSC experiment + final cumulative summary *(perf)*
+- 0031 event-driven broadcast + size-threshold burst flush *(adr)*
+
+### Performance
+
+- Pool batcher doFlush buffer to zero allocs *(session)*
+- Pool MsgData payload buffer to zero allocs *(daemon)*
+- Size-threshold flush in batcher cuts burst latency *(session)*
+- Event-driven broadcast wakeup eliminates 0-16ms tick wait *(daemon)*
+- ParseOSC scans bytes directly, zero alloc on no-match *(daemon)*
+
+### Testing
+
+- Add hot-path benchmarks for PTY broadcast *(perf)*
+
 ## [0.2.2](https://github.com/wblech/wmux/releases/tag/v0.2.2) - 2026-04-21
 
 ### Bug Fixes
