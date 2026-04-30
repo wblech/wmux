@@ -2,6 +2,49 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.4.0](https://github.com/wblech/wmux/releases/tag/v0.4.0) - 2026-04-30
+
+### Bug Fixes
+
+- Gofmt, govet self-assign, testifylint in service_test *(lint)*
+
+### Documentation
+
+- Spec + implementation plan *(osc133)*
+- 0033 OSC 133 shell-integration tracking *(adr)*
+- Integration + architecture docs for OSC 133 *(osc133)*
+
+### Features
+
+- Entity types + sentinel errors *(cmdlifecycle)*
+- Event kind + handler signature *(cmdlifecycle)*
+- Service + state machine + options *(cmdlifecycle)*
+- Fx Module wiring *(cmdlifecycle)*
+- File schema + version constant *(commands)*
+- Load reads commands.json with version gate *(commands)*
+- Debounced writer with atomic rename *(commands)*
+- Command lifecycle event types *(event)*
+- CmdRepository implements cmdlifecycle.Repository *(daemon)*
+- Wire cmdSvc + cmdRepo + publishCmdEvent *(daemon)*
+- ScanOSC dispatches OSC 133 + lazy newline counting *(daemon)*
+- Cmdlifecycle Register/Unregister on session create/exit *(daemon)*
+- Cold-restore commands.json on startup *(daemon)*
+
+### Refactoring
+
+- Remove unused ErrInvalidOSCCode (forward-compat) *(cmdlifecycle)*
+- Remove platform-layer stderr write + dead imports *(commands)*
+- ParseOSC adds Offset field + factor pickOSCEnd *(daemon)*
+
+### Testing
+
+- Regression guards + coverage for perf changes *(session,daemon)*
+- Remove tautological entity tests *(cmdlifecycle)*
+- Allocation regression gates *(cmdlifecycle)*
+- Remove tautological tests + use strings.Contains *(commands)*
+- OSC 133 parsing + mixed/backward-compat coverage *(daemon)*
+- OSC 133 with real bash + direct injection *(e2e)*
+
 ## [0.3.1](https://github.com/wblech/wmux/releases/tag/v0.3.1) - 2026-04-30
 
 ### Documentation
