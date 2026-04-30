@@ -241,6 +241,9 @@ func (d *Daemon) Start(ctx context.Context) error {
 
 	if d.dataDir != "" {
 		_, _ = ReconcileOrphans(d.dataDir)
+		if d.coldRestore && d.cmdSvc != nil {
+			d.restoreCommandHistoriesAtStartup()
+		}
 	}
 
 	childCtx, cancel := context.WithCancel(ctx)
@@ -1837,4 +1840,35 @@ func (d *Daemon) publishCmdEvent(sessID string, ev cmdlifecycle.Event) {
 		return
 	}
 	d.publishEvent(event.Event{Type: t, SessionID: sessID, Payload: payload})
+}
+
+// restoreCommandHistoriesAtStartup walks dataDir for session
+// directories and restores any persisted commands.json into cmdSvc.
+// Also calls cmdRepo.Open and allocates lineCounters for restored
+// sessions so subsequent OSC 133 events persist correctly.
+func (d *Daemon) restoreCommandHistoriesAtStartup() {
+	entries, err := os.ReadDir(d.dataDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		sessID := e.Name()
+		if err := RestoreCommandsForSession(d.dataDir, sessID, d.cmdSvc); err != nil {
+			logErr("cold-restore commands", err)
+			continue
+		}
+		// Wire lineCounter + Writer for any subsequently-attached session.
+		d.lineCountersMu.Lock()
+		if _, ok := d.lineCounters[sessID]; !ok {
+			d.lineCounters[sessID] = new(atomic.Int64)
+		}
+		d.lineCountersMu.Unlock()
+		if d.cmdRepo != nil {
+			path := filepath.Join(d.dataDir, sessID, "commands.json")
+			_ = d.cmdRepo.Open(sessID, path)
+		}
+	}
 }
