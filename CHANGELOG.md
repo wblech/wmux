@@ -2,6 +2,21 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.3.1](https://github.com/wblech/wmux/releases/tag/v0.3.1) - 2026-04-30
+
+### Documentation
+
+- Final autoresearch summary — 0 allocs hot path achieved *(perf)*
+- Worklog entries for E10, E11, E12 — zero-alloc hot path *(perf)*
+- 0032 zero-alloc PTY broadcast hot path *(adr)*
+- Autoresearch complete — final summary record *(perf)*
+
+### Performance
+
+- 2-cycle buffer swap eliminates Buffer.Write alloc *(session)*
+- Pool emulator chunks in readLoop, zero allocs per PTY read *(session)*
+- Single-client fast path in flushSessionOutput, no map alloc *(daemon)*
+
 ## [0.3.0](https://github.com/wblech/wmux/releases/tag/v0.3.0) - 2026-04-30
 
 ### Bug Fixes
