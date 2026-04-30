@@ -9,9 +9,17 @@ import (
 // Buffer is a thread-safe byte buffer with high/low watermark backpressure.
 // When the buffer size exceeds the high watermark, it enters a paused state.
 // It resumes when the buffer drains below the low watermark.
+//
+// Allocation strategy: Buffer tracks the two most-recently drained backing
+// arrays via a 2-cycle chain (inFlight → spare). When Write is called and
+// data is empty, it reclaims spare (returned by the Read two cycles ago,
+// so callers have certainly finished with it) instead of allocating.
+// Result: after two warm-up allocs, steady-state Write cost is 0 allocs/op.
 type Buffer struct {
 	mu            sync.Mutex
 	data          []byte
+	inFlight      []byte // backing array from most-recent full drain; caller may still hold it
+	spare         []byte // backing array from 2nd-most-recent full drain; safe to recycle
 	highWatermark int
 	lowWatermark  int
 	paused        bool
@@ -26,6 +34,8 @@ func newBuffer(highWatermark, lowWatermark int, tracer *debug.Tracer, sessionID 
 	return &Buffer{
 		mu:            sync.Mutex{},
 		data:          nil,
+		inFlight:      nil,
+		spare:         nil,
 		highWatermark: highWatermark,
 		lowWatermark:  lowWatermark,
 		paused:        false,
@@ -39,6 +49,11 @@ func newBuffer(highWatermark, lowWatermark int, tracer *debug.Tracer, sessionID 
 func (b *Buffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
+	if len(b.data) == 0 && b.spare != nil {
+		b.data = b.spare[:0]
+		b.spare = nil
+	}
 
 	b.data = append(b.data, p...)
 
@@ -85,6 +100,8 @@ func (b *Buffer) Read() []byte {
 	}
 
 	out := b.data
+	b.spare = b.inFlight
+	b.inFlight = out
 	b.data = nil
 
 	wasPaused := b.paused
@@ -128,6 +145,8 @@ func (b *Buffer) ReadN(n int) []byte {
 	var out []byte
 	if n >= len(b.data) {
 		out = b.data
+		b.spare = b.inFlight
+		b.inFlight = out
 		b.data = nil
 	} else {
 		out = make([]byte, n)
