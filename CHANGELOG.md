@@ -2,6 +2,16 @@
 
 All notable changes to wmux are documented in this file.
 
+## [0.4.1](https://github.com/wblech/wmux/releases/tag/v0.4.1) - 2026-04-30
+
+### Bug Fixes
+
+- Wire cmdlifecycle.Service in client.Serve so OSC 133 emits events *(daemon)*
+
+### Features
+
+- Expose command history in AttachResult *(milestone-1.1)*
+
 ## [0.4.0](https://github.com/wblech/wmux/releases/tag/v0.4.0) - 2026-04-30
 
 ### Bug Fixes
