@@ -1,0 +1,25 @@
+internal/daemon/cmdrepository_test.go
+  735fa0269df98449 1-71
+internal/daemon/cmdrepository.go
+  735fa0269df98449 1-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "22ea4e15f10d5ba338e5a15d645333c3435220ba",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 171,
+      "total_deletions": 2,
+      "accepted_lines": 169,
+      "overriden_lines": 0
+    }
+  }
+}
