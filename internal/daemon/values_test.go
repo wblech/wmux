@@ -38,4 +38,3 @@ func TestEncodeInputPayload(t *testing.T) {
 	assert.Equal(t, "my-session", sid)
 	assert.Equal(t, []byte("ls\n"), data)
 }
-
