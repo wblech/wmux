@@ -1,0 +1,38 @@
+internal/cmdlifecycle/entity.go
+  735fa0269df98449 1-89
+internal/cmdlifecycle/entity_test.go
+  735fa0269df98449 1-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ea0c0bf2a2ecf560f687ab65f989a750cfa8b101",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 172,
+      "total_deletions": 0,
+      "accepted_lines": 172,
+      "overriden_lines": 0
+    },
+    "85ed52821c259bbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac80b0cc-2d04-439e-af9f-20870c1a22c0",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 447,
+      "total_deletions": 0,
+      "accepted_lines": 447,
+      "overriden_lines": 0
+    }
+  }
+}
