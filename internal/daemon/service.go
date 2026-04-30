@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/wblech/wmux/internal/cmdlifecycle"
 	"github.com/wblech/wmux/internal/platform/ansi"
 	"github.com/wblech/wmux/internal/platform/debug"
 	"github.com/wblech/wmux/internal/platform/event"
@@ -171,6 +173,10 @@ type Daemon struct {
 	maxHistoryDumpSize int64
 	tracer             *debug.Tracer
 	dataReady          chan string // session IDs with new output; nil disables fast path
+	cmdSvc             *cmdlifecycle.Service
+	cmdRepo            *cmdRepository
+	lineCountersMu     sync.RWMutex
+	lineCounters       map[string]*atomic.Int64
 }
 
 // NewDaemon creates a Daemon that uses server for transport and sessionSvc
@@ -199,6 +205,10 @@ func NewDaemon(server TransportServer, sessionSvc SessionManager, opts ...Option
 		maxHistoryDumpSize: 0,
 		tracer:             nil,
 		dataReady:          make(chan string, 256),
+		cmdSvc:             nil,
+		cmdRepo:            nil,
+		lineCountersMu:     sync.RWMutex{},
+		lineCounters:       make(map[string]*atomic.Int64),
 	}
 
 	for _, o := range opts {
@@ -259,6 +269,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 		default:
 		}
 	})
+
+	if d.cmdSvc != nil {
+		d.cmdSvc.OnEvent(d.publishCmdEvent)
+	}
 
 	d.server.OnClient(func(c ConnectedClient) {
 		go d.readControl(childCtx, c)
@@ -1702,4 +1716,40 @@ func errorFrame(msg string) protocol.Frame {
 // sessionInfoToResponse converts a SessionInfo to a SessionResponse.
 func sessionInfoToResponse(info SessionInfo) SessionResponse {
 	return SessionResponse(info)
+}
+
+// publishCmdEvent translates a cmdlifecycle.Event into the matching
+// event.Event type and publishes it on the bus. Called synchronously
+// from cmdlifecycle.Service.HandleOSC.
+func (d *Daemon) publishCmdEvent(sessID string, ev cmdlifecycle.Event) {
+	var t event.Type
+	payload := map[string]any{}
+	switch ev.Kind {
+	case cmdlifecycle.EventPromptShown:
+		t = event.CommandPromptShown
+		payload["row"] = ev.Row
+	case cmdlifecycle.EventCommandStarted:
+		t = event.CommandStarted
+		if ev.Command != nil {
+			payload["started_at"] = ev.Command.StartedAt
+			payload["start_row"] = ev.Command.StartRow
+		}
+	case cmdlifecycle.EventCommandFinished:
+		t = event.CommandFinished
+		if ev.Command != nil {
+			payload["started_at"] = ev.Command.StartedAt
+			payload["ended_at"] = ev.Command.EndedAt
+			payload["exit_code"] = ev.Command.ExitCode
+			payload["start_row"] = ev.Command.StartRow
+			payload["end_row"] = ev.Command.EndRow
+			payload["duration_ms"] = ev.Command.EndedAt.Sub(ev.Command.StartedAt).Milliseconds()
+			payload["orphan"] = ev.Command.Orphan
+			if ev.Command.OrphanReason != "" {
+				payload["orphan_reason"] = ev.Command.OrphanReason
+			}
+		}
+	default:
+		return
+	}
+	d.publishEvent(event.Event{Type: t, SessionID: sessID, Payload: payload})
 }

@@ -1,6 +1,9 @@
 package daemon
 
-import "github.com/wblech/wmux/internal/platform/debug"
+import (
+	"github.com/wblech/wmux/internal/cmdlifecycle"
+	"github.com/wblech/wmux/internal/platform/debug"
+)
 
 // Option is a functional option for configuring a Daemon.
 type Option func(*Daemon)
@@ -39,6 +42,16 @@ func WithEventBus(bus EventBus) Option {
 func WithColdRestore(enabled bool) Option {
 	return func(d *Daemon) {
 		d.coldRestore = enabled
+		d.cmdRepo = newCmdRepository(enabled)
+	}
+}
+
+// WithCommandLifecycle wires the command lifecycle Service into the daemon.
+// Required for OSC 133 event emission. The Repository is implicitly
+// the daemon's cmdRepo (created via WithColdRestore).
+func WithCommandLifecycle(svc *cmdlifecycle.Service) Option {
+	return func(d *Daemon) {
+		d.cmdSvc = svc
 	}
 }
 
