@@ -1,0 +1,25 @@
+internal/daemon/osc.go
+  708d4865456e3d86 4,28-33,36-41,44,47,53-54,75,80,82
+internal/daemon/bench_test.go
+  708d4865456e3d86 24-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b009de4ff497542a14dc07ec2b5a6968d827717b",
+  "prompts": {
+    "708d4865456e3d86": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fdf01a3-8d80-4bd1-a14f-f30ad148f52e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 69,
+      "total_deletions": 7,
+      "accepted_lines": 69,
+      "overriden_lines": 0
+    }
+  }
+}
