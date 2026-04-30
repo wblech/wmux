@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"net/url"
 	"strings"
 )
@@ -24,21 +25,33 @@ type OSCResult struct {
 	Value string
 }
 
+// oscIntroducer is the byte pair that starts an OSC sequence: ESC ].
+var oscIntroducer = []byte{0x1b, ']'}
+
+// oscTerminatorST is the ANSI string terminator: ESC \.
+var oscTerminatorST = []byte{0x1b, '\\'}
+
 // ParseOSC scans data for OSC sequences (7, 9, 99, 777) and returns parsed results.
 // This is a passive scanner — it does not modify the data.
+//
+// Operates directly on []byte without converting to string; for the common
+// case of PTY output without any OSC sequences this avoids allocating a
+// copy of the entire chunk just to scan over it. Only the OSC body content
+// is converted to string when a match is found, since OSCResult.Value is
+// a string.
 func ParseOSC(data []byte) []OSCResult {
 	var results []OSCResult
-	s := string(data)
+	s := data
 
 	for {
-		idx := strings.Index(s, "\x1b]")
+		idx := bytes.Index(s, oscIntroducer)
 		if idx < 0 {
 			break
 		}
 		s = s[idx+2:]
 
-		endST := strings.Index(s, "\x1b\\")
-		endBEL := strings.IndexByte(s, 0x07)
+		endST := bytes.Index(s, oscTerminatorST)
+		endBEL := bytes.IndexByte(s, 0x07)
 
 		end := -1
 		switch {
@@ -59,14 +72,14 @@ func ParseOSC(data []byte) []OSCResult {
 		body := s[:end]
 		s = s[end+1:]
 
-		semicolon := strings.IndexByte(body, ';')
+		semicolon := bytes.IndexByte(body, ';')
 		if semicolon < 0 {
 			continue
 		}
 		oscNum := body[:semicolon]
-		oscValue := body[semicolon+1:]
+		oscValue := string(body[semicolon+1:])
 
-		switch oscNum {
+		switch string(oscNum) {
 		case "7":
 			parsed, err := url.Parse(oscValue)
 			if err == nil && parsed.Path != "" {
