@@ -231,25 +231,93 @@ byte numerics) but memory dropped from 32960 B to 240 B — strict net win.
 Allocs on broadcast hot path: **3 → 1 per chunk** (only `Buffer.Write`
 intrinsic append remains).
 
-## Audit of remaining hot-path candidates
+## Run 6 — E10: Buffer 2-cycle swap eliminates Write alloc (2026-04-29)
 
-Surveyed the remaining 4 daemon scanners (`scanDA`, `persistOutput`,
-`teeRecording`, `notifyOutputWaiters`) — already byte-based and clean.
+**Hypothesis.** `Buffer.Read` sets `b.data = nil`, so the next `Write`
+always allocates a new backing array. A 2-cycle chain (`inFlight → spare`)
+recycles the backing array from two reads ago — safe because callers process
+data synchronously before the next read arrives.
 
-Surveyed the input path (`handleInput` → `WriteInput`) — minimal, low
-volume, not worth optimizing.
+**Change.** `internal/session/backpressure.go`:
+- Added `inFlight []byte` (most-recent drained backing, caller may hold it)
+  and `spare []byte` (2nd-most-recent, safe to recycle).
+- `Write`: if `b.data == nil && spare != nil`, reuses `spare[:0]` instead
+  of allocating.
+- `Read` / full-drain `ReadN`: advance chain: `spare = inFlight`,
+  `inFlight = out`, `data = nil`.
 
-Surveyed the snapshot path — only runs on attach (cold path).
+**Results (M3, -benchtime=5s):**
 
-`flushSessionOutput`'s per-call `make(map[string]struct{}, …)` snapshot
-allocates 1 map per signal. Could be pooled but is small (typical
-1 client) and amortizes against socket I/O.
+| Bench | Before | After | Δ |
+|---|---:|---:|---:|
+| BufferWriteRead ns/op | 4396 | **613** | -86% |
+| BufferWriteRead allocs | 1 | **0** | -100% |
+| BurstSignalLatency ns/op | ~33787 | **6879** | -80% |
+| BurstSignalLatency allocs | 1 | **0** | -100% |
 
-## Next experiments (parked, diminishing returns)
+**Verdict: KEPT.**
 
-- **E3 — broadcastOutput skips idle sessions** (now mostly mitigated by
-  the ticker being a fallback only; the fast path handles all real work).
-- Pool the client-snapshot slice in `flushSessionOutput` if profiling
-  ever flags it.
-- **E6 — document Buffer.Read ownership** (ADR only; code already zero-copy).
-- **E7/E8 — micro-tuning** of mutex/channel sizes (low ROI).
+## Run 7 — E11: pool emulator chunks in readLoop (2026-04-29)
+
+**Hypothesis.** `readLoop` allocates `make([]byte, n)` per PTY read (32 KB)
+to share between batcher and emulator. But batcher copies immediately in
+`Add`, so it doesn't need to own the slice. Emulator can use a pooled
+slice returned after `Process`.
+
+**Change.** `internal/session/service.go`:
+- Added `emulatorChunkPool` (`sync.Pool`, capacity = `readChunkSize`).
+- `readLoop`: `batcher.Add(buf[:n])` directly (no alloc); gets pooled
+  `*[]byte` for emulator channel, `Put`s it on channel-full drop.
+- `emulatorCh` changed from `chan []byte` to `chan *[]byte`.
+- `emulatorLoop`: processes `*emPtr`, then `emulatorChunkPool.Put(emPtr)`.
+- New `BenchmarkReadLoopChunk` added to confirm 0 allocs.
+
+**Results (M3, -benchtime=5s):**
+
+| Bench | Before | After |
+|---|---:|---:|
+| ReadLoopChunk allocs | 1 (32 KB) | **0** |
+| ReadLoopChunk ns/op | — | 3285 |
+
+**Verdict: KEPT.**
+
+## Run 8 — E12: single-client string fast path in flushSessionOutput (2026-04-29)
+
+**Hypothesis.** `flushSessionOutput` always allocates a `map[string]struct{}`
+copy of the client set under RLock. For the common case of exactly 1 attached
+client, a plain `string` variable avoids the map alloc entirely.
+
+**Change.** `internal/daemon/service.go`:
+- `switch len(clientSet)` in `flushSessionOutput`: case 1 captures
+  `singleClient string`; default builds `multiClients []string` (lighter than
+  map).
+- Broadcast loop branches on `singleClient != ""` for 0-alloc single-client
+  path.
+
+**Impact.** Single-client fast path is now fully 0-alloc end-to-end:
+`readLoop → batcher → buffer → payload → broadcast`.
+
+**Verdict: KEPT.**
+
+## Final cumulative wins (Runs 1–8, M3, -benchtime=5s)
+
+| Stage | Baseline | After | Δ |
+|---|---|---|---:|
+| Batcher Add+Flush | 4273 ns / 1 alloc / 32 KB | 1668 ns / **0** / **0** | -61% / -100% |
+| `doFlush` only | 2757 ns / 1 alloc | 939 ns / **0** | -66% / -100% |
+| `BufferWriteRead` | 3836 ns / 1 alloc / 32 KB | 613 ns / **0** / **0** | -84% / -100% |
+| `ReadLoopChunk` | 1 alloc / 32 KB | **0** / **0** | -100% |
+| Payload encode | 2997 ns / 1 alloc / 40 KB | 595 ns / **0** / **0** | -80% / -100% |
+| ParseOSC (no-match) | 2261 ns / 1 alloc / 32 KB | 422 ns / **0** / **0** | -81% / -100% |
+| Burst flush latency | ~16 ms | ~4 µs | ~3900× |
+| Signal latency | ~16 ms | ~6 µs | ~2700× |
+
+**Hot-path allocs: 0 per chunk in steady state (PTY → buffer → broadcast,
+single-client).**
+
+## Remaining low-ROI candidates
+
+- **E3 — broadcastOutput skips idle sessions** (ticker is already fallback;
+  fast path handles all real work).
+- **E6 — Buffer.Read ownership docs** (code already zero-copy; ADR only).
+- **E7/E8 — mutex/channel micro-tuning** (sub-1% wins at best).
