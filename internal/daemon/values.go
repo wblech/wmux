@@ -9,8 +9,25 @@ import (
 var ErrPayloadTooShort = errors.New("daemon: payload too short")
 
 // dataPayloadPool reuses payload buffers across MsgData broadcast frames.
-// Released slices have their backing array reused; callers must hold the
-// slice only between Acquire and Release.
+// The slice returned by AcquireDataPayload is borrowed from this pool — its
+// backing array MAY be recycled by a later Acquire, so retaining it past
+// ReleaseDataPayload is a silent data-corruption bug.
+//
+// Contract:
+//
+//	WRONG:  payload, h := AcquireDataPayload(...)
+//	        go server.Broadcast(payload)             // outlives Release
+//	        ReleaseDataPayload(h)
+//
+//	OK:     payload, h := AcquireDataPayload(...)
+//	        server.Broadcast(payload)                // synchronous
+//	        ReleaseDataPayload(h)
+//
+// Codec.Encode is synchronous (w.Write copies), so releasing after the
+// broadcast loop is safe. Regression gate: BenchmarkAcquireDataPayload must
+// report 0 allocs/op. If it regresses to >0, the pool stopped working and
+// any retained-slice bug in callers stops being silent (they now alias fresh
+// allocations and look "fine") — fix the pool, do not relax the bench.
 var dataPayloadPool = sync.Pool{
 	New: func() any {
 		s := make([]byte, 0, 64*1024)

@@ -14,10 +14,23 @@ const minBatchInterval = time.Millisecond
 // 16 ms timer when a burst arrives.
 const defaultFlushThreshold = 32 * 1024
 
-// flushBufPool reuses []byte buffers handed to onFlush callbacks.
-// Contract: the slice passed to onFlush is only valid for the duration of the
-// call. Callers must copy if they need to retain it. Both production callers
-// (Buffer.Write via append) and tests already copy, so this is safe.
+// flushBufPool reuses []byte buffers handed to onFlush callbacks. The slice
+// passed to onFlush is borrowed from this pool — its backing array MAY be
+// recycled by a later flush, so retaining it past the callback is a silent
+// data-corruption bug.
+//
+// Contract:
+//
+//	WRONG:  func(data []byte) { captured = data }       // alias may mutate
+//	WRONG:  func(data []byte) { go process(data) }      // outlives callback
+//	OK:     func(data []byte) { copy(dst, data) }       // copy is safe
+//	OK:     func(data []byte) { buf.Write(data) }       // append copies
+//
+// Production callers (Buffer.Write via append) and tests already copy.
+// Regression gate: BenchmarkBatcherAddFlush / BenchmarkDoFlush must report
+// 0 allocs/op. If those regress to >0, the pool stopped working and
+// retained-slice bugs in callers stop being silent (they now alias fresh
+// allocations and look "fine") — fix the pool, do not relax the bench.
 var flushBufPool = sync.Pool{
 	New: func() any {
 		s := make([]byte, 0, 64*1024)

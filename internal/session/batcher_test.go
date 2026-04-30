@@ -219,59 +219,6 @@ func TestBatcher_SubThresholdAdd_WaitsForTimer(t *testing.T) {
 	}
 }
 
-// TestBatcher_FlushSliceIsBorrowed_NotCopied documents and gates the pool
-// contract: the slice passed to onFlush is borrowed from flushBufPool and
-// MUST NOT be retained past the callback. This test deliberately violates
-// the contract — capturing the slice across two flushes — and asserts that
-// the second flush mutates the captured reference. If a future change makes
-// doFlush allocate fresh per call, the captured slice would still read the
-// first flush's content and this test fails, signaling that the zero-alloc
-// property regressed (and that the contract documented in batcher.go is no
-// longer enforceable).
-//
-// DO NOT use this code as a template — capturing the slice IS the bug we
-// are demonstrating. Production callers must copy.
-func TestBatcher_FlushSliceIsBorrowed_NotCopied(t *testing.T) {
-	var captured []byte
-	flushed := make(chan struct{}, 2)
-
-	b := newBatcher(time.Second, func(data []byte) {
-		if captured == nil {
-			captured = data // intentional anti-pattern; only safe in callback
-		}
-		select {
-		case flushed <- struct{}{}:
-		default:
-		}
-	})
-	defer b.Stop()
-
-	b.Add([]byte("AAAA"))
-	b.FlushNow()
-	select {
-	case <-flushed:
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("first flush did not arrive")
-	}
-
-	// Second flush with same length so the pooled buffer's append over the
-	// reset slice fully overwrites the bytes captured points at.
-	b.Add([]byte("BBBB"))
-	b.FlushNow()
-	select {
-	case <-flushed:
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("second flush did not arrive")
-	}
-
-	// If doFlush copied or allocated fresh, captured would still read "AAAA".
-	// Borrow contract: the pool reused the array, so captured now reflects
-	// the second flush's content.
-	assert.Equal(t, []byte("BBBB"), captured,
-		"flushBufPool slice must be reused across flushes; if this fails, "+
-			"doFlush is allocating fresh and the zero-alloc property regressed")
-}
-
 func TestNewBatcher_RequiresPositiveInterval(t *testing.T) {
 	// A zero interval should be clamped to minBatchInterval and not panic.
 	flushed := make(chan struct{}, 1)
