@@ -50,9 +50,6 @@ func TestSentinelErrors(t *testing.T) {
 	if ErrSessionExists == nil {
 		t.Error("ErrSessionExists should be non-nil")
 	}
-	if ErrInvalidOSCCode == nil {
-		t.Error("ErrInvalidOSCCode should be non-nil")
-	}
 }
 
 func TestCommand_TimestampZero(t *testing.T) {

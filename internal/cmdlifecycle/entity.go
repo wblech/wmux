@@ -83,7 +83,4 @@ var (
 	// ErrSessionExists is returned by Register or Restore when the session
 	// is already known to the Service.
 	ErrSessionExists = errors.New("cmdlifecycle: session already registered")
-	// ErrInvalidOSCCode is returned by HandleOSC when the code byte is not
-	// one of 'A', 'B', 'C', 'D'.
-	ErrInvalidOSCCode = errors.New("cmdlifecycle: invalid OSC 133 code")
 )
