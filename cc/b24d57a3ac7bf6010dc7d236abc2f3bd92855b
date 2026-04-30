@@ -1,0 +1,27 @@
+internal/daemon/cmdrepository.go
+  a4277fd151fd5d10 32-40
+pkg/client/daemon.go
+  a4277fd151fd5d10 10,97-104,113
+pkg/client/daemon_osc133_test.go
+  a4277fd151fd5d10 1-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ccb24d57a3ac7bf6010dc7d236abc2f3bd92855b",
+  "prompts": {
+    "a4277fd151fd5d10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e626258e-8d17-4f6f-b250-35dc6219c13e",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 175,
+      "total_deletions": 0,
+      "accepted_lines": 175,
+      "overriden_lines": 0
+    }
+  }
+}
