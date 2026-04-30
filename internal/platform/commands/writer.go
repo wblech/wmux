@@ -2,10 +2,8 @@ package commands
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -63,14 +61,13 @@ func NewWriter(path, sessID string, opts ...Option) (*Writer, error) {
 	if path == "" {
 		return nil, fmt.Errorf("commands: path must be non-empty")
 	}
-	w := &Writer{
+	if sessID == "" {
+		return nil, fmt.Errorf("commands: sessID must be non-empty")
+	}
+	w := &Writer{ //nolint:exhaustruct
 		path:     path,
 		sessID:   sessID,
 		debounce: defaultDebounceInterval,
-		mu:       sync.Mutex{},
-		pending:  cmdlifecycle.SessionState{History: nil, InFlight: nil},
-		hasState: false,
-		closed:   false,
 		notifyCh: make(chan struct{}, 1),
 		closeCh:  make(chan struct{}),
 		doneCh:   make(chan struct{}),
@@ -146,9 +143,7 @@ func (w *Writer) run() {
 			}
 		case <-timer.C:
 			pending = false
-			if err := w.flushOnce(); err != nil {
-				logFlushError(w.path, err)
-			}
+			_ = w.flushOnce() // best-effort; next Update/Flush retries on failure
 		case resp := <-w.flushReq:
 			if pending {
 				pending = false
@@ -220,12 +215,3 @@ func cloneCommand(c *cmdlifecycle.Command) *cmdlifecycle.Command {
 	cp := *c
 	return &cp
 }
-
-// logFlushError writes a single line to stderr. The writer keeps running
-// even after a failed flush; the next Update will retry.
-func logFlushError(path string, err error) {
-	fmt.Fprintf(os.Stderr, "wmux: commands.flush %q: %v\n", filepath.Base(filepath.Dir(path)), err)
-}
-
-// satisfy lint
-var _ = errors.New
