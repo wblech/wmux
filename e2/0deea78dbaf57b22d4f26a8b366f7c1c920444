@@ -1,0 +1,29 @@
+internal/daemon/options.go
+  735fa0269df98449 3-6,45-54
+internal/daemon/service.go
+  735fa0269df98449 13,16,176-179,208-211,273-276,1720-1755
+internal/daemon/module.go
+  735fa0269df98449 3-7,10-23
+internal/daemon/cmdwire_test.go
+  735fa0269df98449 1-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e20deea78dbaf57b22d4f26a8b366f7c1c920444",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 168,
+      "total_deletions": 3,
+      "accepted_lines": 168,
+      "overriden_lines": 0
+    }
+  }
+}
