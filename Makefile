@@ -1,4 +1,4 @@
-.PHONY: lint test generate deps docs docs-serve build
+.PHONY: lint test bench generate deps docs docs-serve build
 
 VERSION ?= dev
 COMMIT  ?= $(shell git rev-parse --short HEAD)
@@ -14,6 +14,12 @@ lint:
 
 test:
 	go test -race -shuffle=on ./...
+
+# bench runs the broadcast hot-path benchmarks documented in ADR-0031.
+# Scoped to session+daemon packages where the perf-tracked benchmarks live.
+bench:
+	go test -bench=. -benchmem -benchtime=2s -run='^$$' \
+	  ./internal/session/ ./internal/daemon/
 
 generate:
 	go generate ./...

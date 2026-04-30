@@ -155,6 +155,123 @@ func TestBatcher_Len(t *testing.T) {
 	}, 200*time.Millisecond, 5*time.Millisecond)
 }
 
+// TestBatcher_AddCrossingThreshold_FlushesImmediately is the regression gate
+// for ADR-0031 (size-threshold flush). With a 1 s timer, an Add that crosses
+// defaultFlushThreshold must call onFlush in milliseconds — proving the
+// threshold-driven flush path is wired and not waiting for the ticker.
+func TestBatcher_AddCrossingThreshold_FlushesImmediately(t *testing.T) {
+	flushed := make(chan int, 1)
+
+	b := newBatcher(time.Second, func(data []byte) {
+		select {
+		case flushed <- len(data):
+		default:
+		}
+	})
+	defer b.Stop()
+
+	// Single Add that crosses the threshold in one shot.
+	b.Add(make([]byte, defaultFlushThreshold))
+
+	select {
+	case n := <-flushed:
+		assert.Equal(t, defaultFlushThreshold, n)
+	case <-time.After(50 * time.Millisecond):
+		t.Fatalf("threshold-crossing Add did not trigger flush within 50ms; "+
+			"timer is %s, flush must come from threshold path", time.Second)
+	}
+}
+
+// TestBatcher_SubThresholdAdd_WaitsForTimer is the negative regression: an Add
+// that does NOT cross the threshold must not signal an immediate flush. The
+// flush should arrive only via the timer. This guards against future changes
+// that accidentally turn every Add into an immediate flush (defeating the
+// batching benefit).
+func TestBatcher_SubThresholdAdd_WaitsForTimer(t *testing.T) {
+	flushed := make(chan struct{}, 1)
+
+	// 200 ms interval — long enough that an immediate flush would obviously
+	// arrive before the timer, short enough to keep the test fast.
+	b := newBatcher(200*time.Millisecond, func(_ []byte) {
+		select {
+		case flushed <- struct{}{}:
+		default:
+		}
+	})
+	defer b.Stop()
+
+	// Well below defaultFlushThreshold (32 KB).
+	b.Add(make([]byte, 1024))
+
+	// No flush in the first 50 ms (threshold path must NOT fire).
+	select {
+	case <-flushed:
+		t.Fatal("sub-threshold Add triggered an immediate flush; " +
+			"only the timer should drive small writes")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	// Timer eventually fires.
+	select {
+	case <-flushed:
+	case <-time.After(400 * time.Millisecond):
+		t.Fatal("timer never fired for sub-threshold Add")
+	}
+}
+
+// TestBatcher_FlushSliceIsBorrowed_NotCopied documents and gates the pool
+// contract: the slice passed to onFlush is borrowed from flushBufPool and
+// MUST NOT be retained past the callback. This test deliberately violates
+// the contract — capturing the slice across two flushes — and asserts that
+// the second flush mutates the captured reference. If a future change makes
+// doFlush allocate fresh per call, the captured slice would still read the
+// first flush's content and this test fails, signaling that the zero-alloc
+// property regressed (and that the contract documented in batcher.go is no
+// longer enforceable).
+//
+// DO NOT use this code as a template — capturing the slice IS the bug we
+// are demonstrating. Production callers must copy.
+func TestBatcher_FlushSliceIsBorrowed_NotCopied(t *testing.T) {
+	var captured []byte
+	flushed := make(chan struct{}, 2)
+
+	b := newBatcher(time.Second, func(data []byte) {
+		if captured == nil {
+			captured = data // intentional anti-pattern; only safe in callback
+		}
+		select {
+		case flushed <- struct{}{}:
+		default:
+		}
+	})
+	defer b.Stop()
+
+	b.Add([]byte("AAAA"))
+	b.FlushNow()
+	select {
+	case <-flushed:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("first flush did not arrive")
+	}
+
+	// Second flush with same length so the pooled buffer's append over the
+	// reset slice fully overwrites the bytes captured points at.
+	b.Add([]byte("BBBB"))
+	b.FlushNow()
+	select {
+	case <-flushed:
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("second flush did not arrive")
+	}
+
+	// If doFlush copied or allocated fresh, captured would still read "AAAA".
+	// Borrow contract: the pool reused the array, so captured now reflects
+	// the second flush's content.
+	assert.Equal(t, []byte("BBBB"), captured,
+		"flushBufPool slice must be reused across flushes; if this fails, "+
+			"doFlush is allocating fresh and the zero-alloc property regressed")
+}
+
 func TestNewBatcher_RequiresPositiveInterval(t *testing.T) {
 	// A zero interval should be clamped to minBatchInterval and not panic.
 	flushed := make(chan struct{}, 1)
