@@ -1,0 +1,29 @@
+internal/cmdlifecycle/options_test.go
+  735fa0269df98449 1-47
+internal/cmdlifecycle/options.go
+  735fa0269df98449 1-26
+internal/cmdlifecycle/service.go
+  735fa0269df98449 1-311
+internal/cmdlifecycle/service_test.go
+  735fa0269df98449 1-370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e2fe83f19a8e6975e4c5e51d71174133dd3a95a5",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 757,
+      "total_deletions": 3,
+      "accepted_lines": 754,
+      "overriden_lines": 0
+    }
+  }
+}
