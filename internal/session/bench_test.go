@@ -203,3 +203,54 @@ func BenchmarkBufferWriteRead(b *testing.B) {
 		_ = buf.Read()
 	}
 }
+
+// BenchmarkReadLoopChunk measures the chunk-handling hot path in readLoop:
+// batcher.Add receives the raw PTY buf slice (no alloc — batcher copies),
+// emulator chunk comes from a pool (no alloc in steady state). The benchmark
+// waits for the onFlush callback so each iteration covers the full path.
+//
+// Baseline before E11: 1 alloc per iteration (make([]byte, n) for chunk).
+// After E11: 0 allocs in steady state (pool reuse for both paths).
+func BenchmarkReadLoopChunk(b *testing.B) {
+	const chunkSize = 32 * 1024
+
+	readBuf := make([]byte, chunkSize) // static PTY read buffer (allocated once)
+	for i := range readBuf {
+		readBuf[i] = 0x41
+	}
+
+	buf := newBuffer(4*1024*1024, 2*1024*1024, nil, "bench-readloop")
+	flushed := make(chan struct{}, 1)
+	batcher := newBatcher(time.Hour, func(data []byte) {
+		_, _ = buf.Write(data)
+		select {
+		case flushed <- struct{}{}:
+		default:
+		}
+	})
+	defer batcher.Stop()
+
+	b.SetBytes(int64(chunkSize))
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		// Drain stale signal from prior iteration.
+		select {
+		case <-flushed:
+		default:
+		}
+
+		// Mirror the production readLoop: batcher gets raw slice (copies),
+		// emulator chunk comes from pool.
+		batcher.Add(readBuf[:chunkSize])
+
+		emPtr := emulatorChunkPool.Get().(*[]byte)
+		*emPtr = append((*emPtr)[:0], readBuf[:chunkSize]...)
+		emulatorChunkPool.Put(emPtr) // simulate emulatorLoop returning after Process
+
+		batcher.FlushNow()
+		<-flushed
+		_ = buf.Read()
+	}
+}

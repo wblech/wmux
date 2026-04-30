@@ -45,6 +45,24 @@ const (
 	emulatorChanSize = 64
 )
 
+// emulatorChunkPool reuses chunk slices sent to the async emulator goroutine.
+// readLoop Gets a slice, copies the PTY data, sends the *[]byte to emulatorCh.
+// emulatorLoop Puts the slice back after Process returns.
+//
+// This eliminates the per-read chunk allocation: batcher.Add receives buf[:n]
+// directly (it copies internally) while only the emulator path allocates,
+// and even that is pooled.
+//
+// Ownership rule: the *[]byte is owned by emulatorLoop after the send.
+// If the channel send goes to `default`, readLoop returns the ptr to the pool
+// immediately. emulatorLoop always Puts after Process, even on panic-recovery.
+var emulatorChunkPool = sync.Pool{
+	New: func() any {
+		s := make([]byte, 0, readChunkSize)
+		return &s
+	},
+}
+
 // Repository defines the persistence operations for sessions.
 type Repository interface {
 	// Get returns the session with the given id or ErrSessionNotFound.
@@ -509,7 +527,7 @@ func (s *Service) ReadOutput(id string) ([]byte, error) {
 func (s *Service) readLoop(ms *managedSession) {
 	buf := make([]byte, readChunkSize)
 
-	emulatorCh := make(chan []byte, emulatorChanSize)
+	emulatorCh := make(chan *[]byte, emulatorChanSize)
 	go s.emulatorLoop(ms, emulatorCh)
 
 	for {
@@ -520,41 +538,45 @@ func (s *Service) readLoop(ms *managedSession) {
 
 		n, err := ms.process.Read(buf)
 		if n > 0 {
-			chunk := make([]byte, n)
-			copy(chunk, buf[:n])
-
+			// Pass buf[:n] directly to batcher — Add copies immediately so
+			// we can safely reuse buf on the next Read without any allocation.
 			if s.tracer.Enabled() {
-				s.tracer.Emit(chunkEvent(s.tracer, ms.session.ID, debug.StagePtyRead, chunk))
+				s.tracer.Emit(chunkEvent(s.tracer, ms.session.ID, debug.StagePtyRead, buf[:n]))
 			}
 
-			ms.batcher.Add(chunk)
+			ms.batcher.Add(buf[:n])
+
+			// Emulator path: get a pooled slice for the async goroutine.
+			emPtr := emulatorChunkPool.Get().(*[]byte)
+			*emPtr = append((*emPtr)[:0], buf[:n]...)
 
 			select {
-			case emulatorCh <- chunk:
+			case emulatorCh <- emPtr:
 				if s.tracer.Enabled() {
 					s.tracer.Emit(debug.Event{
 						SessionID: ms.session.ID,
 						Stage:     debug.StageEmulatorIn,
 						Seq:       -1,
-						ByteLen:   len(chunk),
+						ByteLen:   n,
 					})
 				}
 			default:
-				// Channel full — skip emulator for this chunk.
-				// Broadcast (batcher) already has the data; only snapshot
-				// accuracy is degraded, which self-heals on the next chunk.
+				// Channel full — skip emulator for this chunk and return the
+				// pooled slice immediately. Broadcast (batcher) already has the
+				// data; only snapshot accuracy is degraded, self-heals on next.
+				emulatorChunkPool.Put(emPtr)
 				if s.tracer.Enabled() {
 					s.tracer.Emit(debug.Event{
 						SessionID: ms.session.ID,
 						Stage:     debug.StageEmulatorDrop,
 						Seq:       -1,
-						ByteLen:   len(chunk),
+						ByteLen:   n,
 					})
 				}
 			}
 
 			if ms.historyWriter != nil {
-				_, _ = ms.historyWriter.Write(chunk)
+				_, _ = ms.historyWriter.Write(buf[:n])
 			}
 			ms.lastActivity.Store(time.Now().UnixNano())
 		}
@@ -569,25 +591,28 @@ func (s *Service) readLoop(ms *managedSession) {
 // emulatorLoop processes PTY output chunks through the screen emulator in a
 // dedicated goroutine. It recovers from panics so a misbehaving emulator
 // never kills the readLoop. Chunks are processed in order via the channel.
-func (s *Service) emulatorLoop(ms *managedSession, ch <-chan []byte) {
-	for chunk := range ch {
+// Each *[]byte received is returned to emulatorChunkPool after processing.
+func (s *Service) emulatorLoop(ms *managedSession, ch <-chan *[]byte) {
+	for emPtr := range ch {
+		n := len(*emPtr)
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
 					fmt.Fprintf(os.Stderr, "wmux: emulator.Process panic (session=%s): %v\n", ms.session.ID, r)
 				}
 			}()
-			ms.emulator.Process(chunk)
+			ms.emulator.Process(*emPtr)
 
 			if s.tracer.Enabled() {
 				s.tracer.Emit(debug.Event{
 					SessionID: ms.session.ID,
 					Stage:     debug.StageEmulatorOut,
 					Seq:       -1,
-					ByteLen:   len(chunk),
+					ByteLen:   n,
 				})
 			}
 		}()
+		emulatorChunkPool.Put(emPtr)
 	}
 }
 
