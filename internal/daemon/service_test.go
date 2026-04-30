@@ -3150,8 +3150,8 @@ type broadcastCall struct {
 	frame    protocol.Frame
 }
 
-func (s *spyTransportServer) OnClient(_ func(ConnectedClient))              {}
-func (s *spyTransportServer) Serve(_ context.Context) error                { return nil }
+func (s *spyTransportServer) OnClient(_ func(ConnectedClient)) {}
+func (s *spyTransportServer) Serve(_ context.Context) error    { return nil }
 func (s *spyTransportServer) BroadcastTo(clientID string, f protocol.Frame) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -3191,7 +3191,6 @@ func TestDaemon_FlushSessionOutput_SingleClient_ZeroAlloc(t *testing.T) {
 	d.flushSessionOutput("sess-1")
 
 	allocs := testing.AllocsPerRun(50, func() {
-		sm.data = sm.data // same slice, ReadOutput returns it
 		d.flushSessionOutput("sess-1")
 	})
 
@@ -3199,7 +3198,7 @@ func TestDaemon_FlushSessionOutput_SingleClient_ZeroAlloc(t *testing.T) {
 	count := len(spy.broadcast)
 	spy.mu.Unlock()
 
-	assert.Greater(t, count, 0, "expected at least one broadcast")
+	assert.Positive(t, count, "expected at least one broadcast")
 
 	if allocs > 1 {
 		t.Errorf("single-client flush: expected ≤1 alloc/op, got %.1f", allocs)
