@@ -1,0 +1,25 @@
+test/e2e/osc133_e2e_test.go
+  735fa0269df98449 1-164
+test/e2e/e2e_test.go
+  735fa0269df98449 16,27-33,68-69,74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "95a800ac62d65e47f27d569a332bd60901680dd8",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 269,
+      "total_deletions": 36,
+      "accepted_lines": 175,
+      "overriden_lines": 0
+    }
+  }
+}
