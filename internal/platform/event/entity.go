@@ -36,6 +36,13 @@ const (
 	RecordingLimitReached
 	// ShellReady is emitted when a session's shell signals readiness via OSC marker.
 	ShellReady
+	// CommandPromptShown is emitted when a shell prompt is drawn (OSC 133;A).
+	CommandPromptShown
+	// CommandStarted is emitted when a user command begins executing (OSC 133;C).
+	CommandStarted
+	// CommandFinished is emitted when a command completes with an exit code (OSC 133;D)
+	// or is closed as orphan due to a missing marker / daemon restart.
+	CommandFinished
 )
 
 // String returns the dot-notation name of the event type.
@@ -65,6 +72,12 @@ func (t Type) String() string {
 		return "recording.limit_reached"
 	case ShellReady:
 		return "shell.ready"
+	case CommandPromptShown:
+		return "command.prompt_shown"
+	case CommandStarted:
+		return "command.started"
+	case CommandFinished:
+		return "command.finished"
 	default:
 		return "unknown"
 	}
@@ -116,6 +129,12 @@ func typeFromString(s string) (Type, bool) {
 		return RecordingLimitReached, true
 	case "shell.ready":
 		return ShellReady, true
+	case "command.prompt_shown":
+		return CommandPromptShown, true
+	case "command.started":
+		return CommandStarted, true
+	case "command.finished":
+		return CommandFinished, true
 	default:
 		return 0, false
 	}

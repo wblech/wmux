@@ -131,3 +131,47 @@ func TestEvent_Fields(t *testing.T) {
 	assert.Equal(t, "s1", e.SessionID)
 	assert.Equal(t, "/bin/zsh", e.Payload["shell"])
 }
+
+func TestType_String_CommandPromptShown(t *testing.T) {
+	if got := CommandPromptShown.String(); got != "command.prompt_shown" {
+		t.Errorf("String() = %q, want %q", got, "command.prompt_shown")
+	}
+}
+
+func TestType_String_CommandStarted(t *testing.T) {
+	if got := CommandStarted.String(); got != "command.started" {
+		t.Errorf("String() = %q, want %q", got, "command.started")
+	}
+}
+
+func TestType_String_CommandFinished(t *testing.T) {
+	if got := CommandFinished.String(); got != "command.finished" {
+		t.Errorf("String() = %q, want %q", got, "command.finished")
+	}
+}
+
+func TestType_RoundtripJSON_CommandTypes(t *testing.T) {
+	cases := []struct {
+		name string
+		typ  Type
+	}{
+		{"prompt_shown", CommandPromptShown},
+		{"started", CommandStarted},
+		{"finished", CommandFinished},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			data, err := c.typ.MarshalJSON()
+			if err != nil {
+				t.Fatalf("MarshalJSON: %v", err)
+			}
+			var got Type
+			if err := got.UnmarshalJSON(data); err != nil {
+				t.Fatalf("UnmarshalJSON: %v", err)
+			}
+			if got != c.typ {
+				t.Errorf("roundtrip: got %v, want %v", got, c.typ)
+			}
+		})
+	}
+}
