@@ -698,15 +698,30 @@ func (d *Daemon) broadcastOutput(ctx context.Context) {
 // but scoped to one session ID, which is the common case after a batcher
 // signal.
 func (d *Daemon) flushSessionOutput(sessID string) {
+	// Fast path for the common case of exactly one attached client: extract
+	// the client ID as a plain string so we avoid allocating a map copy.
 	d.mu.RLock()
 	clientSet, attached := d.attachments[sessID]
-	clients := make(map[string]struct{}, len(clientSet))
-	for id := range clientSet {
-		clients[id] = struct{}{}
+	var (
+		singleClient string
+		multiClients []string
+	)
+	switch len(clientSet) {
+	case 0:
+		// nothing to do; attached may still be true (key present, empty set)
+	case 1:
+		for id := range clientSet {
+			singleClient = id
+		}
+	default:
+		multiClients = make([]string, 0, len(clientSet))
+		for id := range clientSet {
+			multiClients = append(multiClients, id)
+		}
 	}
 	d.mu.RUnlock()
 
-	if !attached || len(clients) == 0 {
+	if !attached || (singleClient == "" && len(multiClients) == 0) {
 		// Still need to drain the buffer for waiters/persistence even
 		// without attached clients; defer to flushOutput's slow path.
 		d.flushOutput()
@@ -731,8 +746,8 @@ func (d *Daemon) flushSessionOutput(sessID string) {
 		Payload: payload,
 	}
 
-	for clientID := range clients {
-		_ = d.server.BroadcastTo(clientID, frame)
+	if singleClient != "" {
+		_ = d.server.BroadcastTo(singleClient, frame)
 		if d.tracer.Enabled() {
 			d.tracer.Emit(debug.Event{
 				SessionID: sessID,
@@ -740,6 +755,18 @@ func (d *Daemon) flushSessionOutput(sessID string) {
 				Seq:       -1,
 				ByteLen:   len(data),
 			})
+		}
+	} else {
+		for _, clientID := range multiClients {
+			_ = d.server.BroadcastTo(clientID, frame)
+			if d.tracer.Enabled() {
+				d.tracer.Emit(debug.Event{
+					SessionID: sessID,
+					Stage:     debug.StageFrameSend,
+					Seq:       -1,
+					ByteLen:   len(data),
+				})
+			}
 		}
 	}
 	ReleaseDataPayload(payloadHandle)
