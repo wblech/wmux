@@ -88,6 +88,43 @@ func TestBenchmarkParseOSC_NoOSC_ZeroAllocs(t *testing.T) {
 	}
 }
 
+// BenchmarkParseOSC_With133 measures the cost when the chunk contains
+// OSC 133 markers (the new feature). Baseline for the 133-match path.
+func BenchmarkParseOSC_With133(b *testing.B) {
+	const chunkSize = 32 * 1024
+	prefix := []byte("\x1b]133;C\x07")
+	suffix := []byte("\x1b]133;D;0\x07")
+	mid := make([]byte, chunkSize-len(prefix)-len(suffix))
+	for i := range mid {
+		mid[i] = byte('a' + (i % 26))
+	}
+	data := make([]byte, 0, chunkSize)
+	data = append(data, prefix...)
+	data = append(data, mid...)
+	data = append(data, suffix...)
+
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	var sinkLen int
+	for i := 0; i < b.N; i++ {
+		sinkLen = len(ParseOSC(data))
+	}
+	_ = sinkLen
+}
+
+// BenchmarkParseOSC_Mixed measures the cost of parsing a chunk with
+// mixed OSC types (7 + 133 + 777).
+func BenchmarkParseOSC_Mixed(b *testing.B) {
+	data := []byte("output\x1b]7;file:///x\x1b\\\x1b]133;C\x07stuff\n\x1b]133;D;0\x07\x1b]777;wmux;shell-ready\x07")
+	b.SetBytes(int64(len(data)))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = ParseOSC(data)
+	}
+}
+
 // BenchmarkAcquireDataPayload measures the pooled equivalent of
 // EncodeDataPayload. Acquire+release per call mirrors the broadcast loop.
 func BenchmarkAcquireDataPayload(b *testing.B) {

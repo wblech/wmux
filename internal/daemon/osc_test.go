@@ -112,3 +112,101 @@ func TestParseOSC_NoMatch_ReturnsNil(t *testing.T) {
 		t.Errorf("results = %v, want nil", results)
 	}
 }
+
+func TestParseOSC_133_A(t *testing.T) {
+	data := []byte("\x1b]133;A\x07")
+	results := ParseOSC(data)
+	if len(results) != 1 {
+		t.Fatalf("got %d results, want 1", len(results))
+	}
+	if results[0].Type != OSCType133 {
+		t.Errorf("Type = %v, want OSCType133", results[0].Type)
+	}
+	if results[0].Value != "A" {
+		t.Errorf("Value = %q, want A", results[0].Value)
+	}
+}
+
+func TestParseOSC_133_D_WithExit(t *testing.T) {
+	data := []byte("\x1b]133;D;42\x07")
+	results := ParseOSC(data)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].Value != "D;42" {
+		t.Errorf("Value = %q, want D;42", results[0].Value)
+	}
+}
+
+func TestParseOSC_133_D_NoExit(t *testing.T) {
+	data := []byte("\x1b]133;D\x07")
+	results := ParseOSC(data)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].Value != "D" {
+		t.Errorf("Value = %q, want D", results[0].Value)
+	}
+}
+
+func TestParseOSC_133_ExtraSegments(t *testing.T) {
+	data := []byte("\x1b]133;D;0;extra\x07")
+	results := ParseOSC(data)
+	if results[0].Value != "D;0;extra" {
+		t.Errorf("Value = %q, want D;0;extra (extra segments preserved for daemon parsing)", results[0].Value)
+	}
+}
+
+func TestParseOSC_Mixed_133_7_777(t *testing.T) {
+	data := []byte("output\x1b]7;file:///x\x1b\\\x1b]133;C\x07ls\n\x1b]133;D;0\x07\x1b]777;wmux;shell-ready\x07")
+	results := ParseOSC(data)
+	if len(results) != 4 {
+		t.Fatalf("got %d, want 4: %+v", len(results), results)
+	}
+	wantTypes := []OSCType{OSCTypeCwd, OSCType133, OSCType133, OSCTypeShellReady}
+	for i, w := range wantTypes {
+		if results[i].Type != w {
+			t.Errorf("results[%d].Type = %v, want %v", i, results[i].Type, w)
+		}
+	}
+}
+
+func TestParseOSC_133_OffsetAccuracy(t *testing.T) {
+	prefix := []byte("hello world ")
+	osc := []byte("\x1b]133;C\x07")
+	data := make([]byte, 0, len(prefix)+len(osc))
+	data = append(data, prefix...)
+	data = append(data, osc...)
+	results := ParseOSC(data)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].Offset != len(prefix) {
+		t.Errorf("Offset = %d, want %d (start of ESC])", results[0].Offset, len(prefix))
+	}
+}
+
+func TestParseOSC_BackwardCompat_OSC7(t *testing.T) {
+	data := []byte("\x1b]7;file:///home/user\x1b\\")
+	results := ParseOSC(data)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].Type != OSCTypeCwd {
+		t.Errorf("Type = %v, want OSCTypeCwd", results[0].Type)
+	}
+	if results[0].Value != "/home/user" {
+		t.Errorf("Value = %q, want /home/user", results[0].Value)
+	}
+}
+
+func TestParseOSC_BackwardCompat_OSC777_ShellReady(t *testing.T) {
+	data := []byte("\x1b]777;wmux;shell-ready\x07")
+	results := ParseOSC(data)
+	if len(results) != 1 {
+		t.Fatalf("got %d, want 1", len(results))
+	}
+	if results[0].Type != OSCTypeShellReady {
+		t.Errorf("Type = %v, want OSCTypeShellReady", results[0].Type)
+	}
+}
