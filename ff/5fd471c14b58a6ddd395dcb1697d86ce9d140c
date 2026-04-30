@@ -1,0 +1,25 @@
+internal/daemon/service.go
+  735fa0269df98449 11,928-937,940-948,970-1008,1010,1012
+internal/daemon/osc133_dispatch_test.go
+  735fa0269df98449 1-135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "ff5fd471c14b58a6ddd395dcb1697d86ce9d140c",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 197,
+      "total_deletions": 2,
+      "accepted_lines": 196,
+      "overriden_lines": 0
+    }
+  }
+}
