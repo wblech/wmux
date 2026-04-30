@@ -3138,3 +3138,313 @@ func TestDaemon_UpdateEmulatorScrollback_InvalidPayload(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, protocol.MsgError, resp.Type)
 }
+
+// spyTransportServer records BroadcastTo calls for unit tests of flush paths.
+type spyTransportServer struct {
+	mu        sync.Mutex
+	broadcast []broadcastCall
+}
+
+type broadcastCall struct {
+	clientID string
+	frame    protocol.Frame
+}
+
+func (s *spyTransportServer) OnClient(_ func(ConnectedClient))              {}
+func (s *spyTransportServer) Serve(_ context.Context) error                { return nil }
+func (s *spyTransportServer) BroadcastTo(clientID string, f protocol.Frame) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.broadcast = append(s.broadcast, broadcastCall{clientID: clientID, frame: f})
+	return nil
+}
+
+// readOutputSpySessionManager extends noopSessionManager to return fixed data
+// from ReadOutput. Used for flush path unit tests.
+type readOutputSpySessionManager struct {
+	noopSessionManager
+	data []byte
+}
+
+func (s *readOutputSpySessionManager) ReadOutput(_ string) ([]byte, error) {
+	return s.data, nil
+}
+
+// newTestDaemonWithServer builds a Daemon wired to a spy server and session
+// manager, with the provided attachment map. Used for flush path unit tests.
+func newTestDaemonWithServer(srv TransportServer, sm SessionManager, attachments map[string]map[string]struct{}) *Daemon {
+	d := newTestDaemonUnit(sm, nil, attachments)
+	d.server = srv
+	return d
+}
+
+func TestDaemon_FlushSessionOutput_SingleClient_ZeroAlloc(t *testing.T) {
+	spy := &spyTransportServer{}
+	sm := &readOutputSpySessionManager{data: make([]byte, 32*1024)}
+
+	attachments := map[string]map[string]struct{}{
+		"sess-1": {"client-a": {}},
+	}
+	d := newTestDaemonWithServer(spy, sm, attachments)
+
+	// Warmup
+	d.flushSessionOutput("sess-1")
+
+	allocs := testing.AllocsPerRun(50, func() {
+		sm.data = sm.data // same slice, ReadOutput returns it
+		d.flushSessionOutput("sess-1")
+	})
+
+	spy.mu.Lock()
+	count := len(spy.broadcast)
+	spy.mu.Unlock()
+
+	assert.Greater(t, count, 0, "expected at least one broadcast")
+
+	if allocs > 1 {
+		t.Errorf("single-client flush: expected ≤1 alloc/op, got %.1f", allocs)
+	}
+}
+
+func TestDaemon_FlushSessionOutput_MultiClient_BroadcastsAll(t *testing.T) {
+	spy := &spyTransportServer{}
+	sm := &readOutputSpySessionManager{data: []byte("hello multi")}
+
+	attachments := map[string]map[string]struct{}{
+		"sess-1": {"client-a": {}, "client-b": {}, "client-c": {}},
+	}
+	d := newTestDaemonWithServer(spy, sm, attachments)
+
+	d.flushSessionOutput("sess-1")
+
+	spy.mu.Lock()
+	broadcast := spy.broadcast
+	spy.mu.Unlock()
+
+	assert.Len(t, broadcast, 3, "expected 3 broadcasts for 3 clients")
+
+	seen := map[string]bool{}
+	for _, b := range broadcast {
+		seen[b.clientID] = true
+	}
+	assert.True(t, seen["client-a"])
+	assert.True(t, seen["client-b"])
+	assert.True(t, seen["client-c"])
+}
+
+func TestDaemon_FlushSessionOutput_NoClients_FallsThrough(t *testing.T) {
+	spy := &spyTransportServer{}
+	sm := &readOutputSpySessionManager{data: []byte("some data")}
+
+	// Session attached but 0 clients — should fall through to flushOutput.
+	attachments := map[string]map[string]struct{}{
+		"sess-1": {},
+	}
+	d := newTestDaemonWithServer(spy, sm, attachments)
+
+	// Should not panic; broadcast count stays 0 (no clients to send to).
+	d.flushSessionOutput("sess-1")
+
+	spy.mu.Lock()
+	count := len(spy.broadcast)
+	spy.mu.Unlock()
+
+	assert.Equal(t, 0, count)
+}
+
+func TestDaemon_scanOSC_CwdChanged(t *testing.T) {
+	bus := &spyEventBus{mu: sync.Mutex{}, events: nil}
+	d := newTestDaemonUnit(&noopSessionManager{}, bus, map[string]map[string]struct{}{})
+
+	// OSC 7 cwd update.
+	data := []byte("\x1b]7;file:///home/user/projects\x1b\\")
+	d.scanOSC("s1", data)
+
+	require.Len(t, bus.events, 1)
+	assert.Equal(t, event.CwdChanged, bus.events[0].Type)
+	assert.Equal(t, "s1", bus.events[0].SessionID)
+	assert.Equal(t, "/home/user/projects", bus.events[0].Payload["cwd"])
+}
+
+func TestDaemon_scanOSC_Notification(t *testing.T) {
+	bus := &spyEventBus{mu: sync.Mutex{}, events: nil}
+	d := newTestDaemonUnit(&noopSessionManager{}, bus, map[string]map[string]struct{}{})
+
+	// OSC 9 notification.
+	data := []byte("\x1b]9;build done\x1b\\")
+	d.scanOSC("s1", data)
+
+	require.Len(t, bus.events, 1)
+	assert.Equal(t, event.Notification, bus.events[0].Type)
+	assert.Equal(t, "s1", bus.events[0].SessionID)
+	assert.Equal(t, "build done", bus.events[0].Payload["body"])
+}
+
+func TestDaemon_scanOSC_NoOSC(t *testing.T) {
+	bus := &spyEventBus{mu: sync.Mutex{}, events: nil}
+	d := newTestDaemonUnit(&noopSessionManager{}, bus, map[string]map[string]struct{}{})
+
+	d.scanOSC("s1", []byte("plain output with no OSC sequences"))
+
+	assert.Empty(t, bus.events)
+}
+
+func TestDaemon_WithRecordingMaxSize(t *testing.T) {
+	d := NewDaemon(nil, &noopSessionManager{}, WithRecordingMaxSize(1024*1024))
+	assert.Equal(t, int64(1024*1024), d.recordingMaxSize)
+}
+
+func TestDaemon_WithMaxHistoryDumpSize(t *testing.T) {
+	d := NewDaemon(nil, &noopSessionManager{}, WithMaxHistoryDumpSize(512*1024))
+	assert.Equal(t, int64(512*1024), d.maxHistoryDumpSize)
+}
+
+func TestDaemon_WithTracer(t *testing.T) {
+	d := NewDaemon(nil, &noopSessionManager{}, WithTracer(nil))
+	assert.Nil(t, d.tracer)
+}
+
+func TestReleaseDataPayload_NilHandle(t *testing.T) {
+	// Calling ReleaseDataPayload with nil must not panic.
+	ReleaseDataPayload(nil)
+}
+
+func TestDAType_String_Unknown(t *testing.T) {
+	assert.Equal(t, "unknown", DAType(99).String())
+}
+
+func TestDaemon_History_TextFormat(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	// Create a session so Snapshot succeeds (returns empty Replay).
+	sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "hist-text", Shell: "/bin/sh", Args: []string{"-c", "sleep 10"},
+		Cols: 80, Rows: 24,
+	})
+
+	histReq, _ := json.Marshal(HistoryRequest{
+		SessionID: "hist-text", Format: "text", Lines: 0,
+	})
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistory,
+		Payload: histReq,
+	})
+	require.NoError(t, err)
+
+	// Expect MsgHistory frames (possibly 0) followed by MsgHistoryEnd.
+	for {
+		frame, err := ctrl.ReadFrame()
+		require.NoError(t, err)
+		if frame.Type == protocol.MsgHistoryEnd {
+			break
+		}
+		require.Equal(t, protocol.MsgHistory, frame.Type)
+	}
+}
+
+func TestDaemon_History_HTMLFormat(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+
+	d, token, sock := testDaemon(t)
+	cancel := startDaemon(t, d)
+	defer cancel()
+
+	ctrl, _ := dialControl(t, sock, token)
+	defer ctrl.Close() //nolint:errcheck
+
+	sendControl(t, ctrl, protocol.MsgCreate, CreateRequest{
+		ID: "hist-html", Shell: "/bin/sh", Args: []string{"-c", "sleep 10"},
+		Cols: 80, Rows: 24,
+	})
+
+	histReq, _ := json.Marshal(HistoryRequest{
+		SessionID: "hist-html", Format: "html", Lines: 0,
+	})
+	err := ctrl.WriteFrame(protocol.Frame{
+		Version: protocol.ProtocolVersion,
+		Type:    protocol.MsgHistory,
+		Payload: histReq,
+	})
+	require.NoError(t, err)
+
+	for {
+		frame, err := ctrl.ReadFrame()
+		require.NoError(t, err)
+		if frame.Type == protocol.MsgHistoryEnd {
+			break
+		}
+		require.Equal(t, protocol.MsgHistory, frame.Type)
+	}
+}
+
+func TestDaemon_CloseRecording_ActiveWriter(t *testing.T) {
+	dir := t.TempDir()
+	w, err := recording.NewWriter(filepath.Join(dir, "test.cast"), 80, 24, 0)
+	require.NoError(t, err)
+
+	d := newTestDaemonUnit(&noopSessionManager{}, nil, map[string]map[string]struct{}{})
+	d.recordings["sess-rec"] = w
+
+	d.closeRecording("sess-rec")
+
+	d.mu.RLock()
+	_, ok := d.recordings["sess-rec"]
+	d.mu.RUnlock()
+	assert.False(t, ok, "recording should be removed after close")
+}
+
+func TestDaemon_TeeRecording_WritesToWriter(t *testing.T) {
+	dir := t.TempDir()
+	w, err := recording.NewWriter(filepath.Join(dir, "test.cast"), 80, 24, 0)
+	require.NoError(t, err)
+
+	d := newTestDaemonUnit(&noopSessionManager{}, nil, map[string]map[string]struct{}{})
+	d.recordings["sess-tee"] = w
+
+	// Should write without error and keep the recording active.
+	d.teeRecording("sess-tee", []byte("hello world"))
+
+	d.mu.RLock()
+	_, ok := d.recordings["sess-tee"]
+	d.mu.RUnlock()
+	assert.True(t, ok, "recording should remain active after successful write")
+
+	_ = w.Close()
+}
+
+func TestDaemon_TeeRecording_SizeLimitReached(t *testing.T) {
+	dir := t.TempDir()
+	// 1-byte limit: any write will hit the limit immediately.
+	w, err := recording.NewWriter(filepath.Join(dir, "test.cast"), 80, 24, 1)
+	require.NoError(t, err)
+
+	bus := &spyEventBus{mu: sync.Mutex{}, events: nil}
+	d := newTestDaemonUnit(&noopSessionManager{}, bus, map[string]map[string]struct{}{})
+	d.recordings["sess-limit"] = w
+
+	d.teeRecording("sess-limit", make([]byte, 1024))
+
+	d.mu.RLock()
+	_, ok := d.recordings["sess-limit"]
+	d.mu.RUnlock()
+	assert.False(t, ok, "recording should be removed when size limit is reached")
+
+	bus.mu.Lock()
+	evts := bus.events
+	bus.mu.Unlock()
+	require.Len(t, evts, 1)
+	assert.Equal(t, event.RecordingLimitReached, evts[0].Type)
+	assert.Equal(t, "sess-limit", evts[0].SessionID)
+}

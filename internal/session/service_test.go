@@ -715,3 +715,57 @@ func TestService_MetaGetAllReturnsDefensiveCopy(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "v", val, "MetaGetAll should return a defensive copy")
 }
+
+func TestService_OnExitMethodSetter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+
+	exitCh := make(chan int, 1)
+	svc.OnExit(func(_ string, code int) {
+		exitCh <- code
+	})
+
+	opts := defaultCreateOpts()
+	opts.Args = []string{"-c", "exit 7"}
+	_, err := svc.Create("on-exit-setter", opts)
+	require.NoError(t, err)
+
+	select {
+	case code := <-exitCh:
+		assert.Equal(t, 7, code)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for OnExit callback from method setter")
+	}
+}
+
+func TestService_OnDataReadyMethodSetter(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("PTY not supported on Windows")
+	}
+	svc := NewService(&pty.UnixSpawner{})
+
+	readyCh := make(chan string, 10)
+	svc.OnDataReady(func(id string) {
+		select {
+		case readyCh <- id:
+		default:
+		}
+	})
+
+	opts := defaultCreateOpts()
+	// Produce >32 KB so the size threshold triggers an immediate flush
+	// before the process exits — avoids the race with batcher.Stop().
+	opts.Args = []string{"-c", "yes | head -c 65536; sleep 0.1"}
+	_, err := svc.Create("on-data-ready-setter", opts)
+	require.NoError(t, err)
+	defer func() { _ = svc.Kill("on-data-ready-setter") }()
+
+	select {
+	case id := <-readyCh:
+		assert.Equal(t, "on-data-ready-setter", id)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout: OnDataReady callback never fired")
+	}
+}
