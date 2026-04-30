@@ -1,0 +1,25 @@
+internal/session/batcher.go
+  4e0014766e568926 17-33
+internal/daemon/values.go
+  4e0014766e568926 12-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "83acf847bd12cb136102e79285317cc34414f38b",
+  "prompts": {
+    "4e0014766e568926": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fbb4f910-6a03-45af-9327-f5398b9c350f",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 36,
+      "total_deletions": 103,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    }
+  }
+}
