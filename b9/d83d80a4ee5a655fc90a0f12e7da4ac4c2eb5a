@@ -1,0 +1,23 @@
+experiments/worklog.md
+  85ed52821c259bbd 234,236-239,241-247,249,251-265,267-282,284-323
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b9d83d80a4ee5a655fc90a0f12e7da4ac4c2eb5a",
+  "prompts": {
+    "85ed52821c259bbd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ac80b0cc-2d04-439e-af9f-20870c1a22c0",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 84,
+      "total_deletions": 16,
+      "accepted_lines": 84,
+      "overriden_lines": 0
+    }
+  }
+}
