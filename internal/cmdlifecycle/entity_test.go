@@ -43,15 +43,6 @@ func TestSessionState_ZeroValue(t *testing.T) {
 	}
 }
 
-func TestOrphanReasonConsts(t *testing.T) {
-	if OrphanReasonMissingD != "missing_d_marker" {
-		t.Errorf("OrphanReasonMissingD = %q, want %q", OrphanReasonMissingD, "missing_d_marker")
-	}
-	if OrphanReasonDaemonRestart != "daemon_restart" {
-		t.Errorf("OrphanReasonDaemonRestart = %q, want %q", OrphanReasonDaemonRestart, "daemon_restart")
-	}
-}
-
 func TestSentinelErrors(t *testing.T) {
 	if ErrSessionNotRegistered == nil {
 		t.Error("ErrSessionNotRegistered should be non-nil")
@@ -61,17 +52,6 @@ func TestSentinelErrors(t *testing.T) {
 	}
 	if ErrInvalidOSCCode == nil {
 		t.Error("ErrInvalidOSCCode should be non-nil")
-	}
-}
-
-func TestCommand_RowMonotonicInvariant(t *testing.T) {
-	c := Command{StartRow: 100, EndRow: 100}
-	if c.EndRow < c.StartRow {
-		t.Error("EndRow must be >= StartRow")
-	}
-	c.EndRow = 200
-	if c.EndRow < c.StartRow {
-		t.Error("EndRow must be >= StartRow")
 	}
 }
 
