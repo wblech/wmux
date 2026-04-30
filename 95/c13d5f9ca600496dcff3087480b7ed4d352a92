@@ -1,0 +1,23 @@
+internal/daemon/service_test.go
+  735fa0269df98449 3153-3154,3201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "95c13d5f9ca600496dcff3087480b7ed4d352a92",
+  "prompts": {
+    "735fa0269df98449": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9fe32a27-7293-4629-a0f5-cd20014e0a8c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "wblech",
+      "messages": [],
+      "total_additions": 4,
+      "total_deletions": 5,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    }
+  }
+}
