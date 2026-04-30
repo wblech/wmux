@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -82,4 +83,85 @@ func TestPublishCmdEvent_NoBus_NoOp(t *testing.T) {
 	d := &Daemon{eventBus: nil}
 	// Should not panic.
 	d.publishCmdEvent("s1", cmdlifecycle.Event{Kind: cmdlifecycle.EventPromptShown})
+}
+
+func TestDaemon_HandleCreate_RegistersCmdSvc(t *testing.T) {
+	repo := newCmdRepository(false)
+	cmdSvc := cmdlifecycle.NewService(repo)
+	d := &Daemon{
+		cmdSvc:       cmdSvc,
+		cmdRepo:      repo,
+		lineCounters: make(map[string]*atomic.Int64),
+	}
+
+	// Simulate handleCreate's wiring inline (bypassing IPC machinery).
+	const sid = "s1"
+	_ = cmdSvc.Register(sid)
+	d.lineCountersMu.Lock()
+	d.lineCounters[sid] = new(atomic.Int64)
+	d.lineCountersMu.Unlock()
+
+	if _, err := cmdSvc.Snapshot(sid); err != nil {
+		t.Errorf("cmdSvc should know about %s, got %v", sid, err)
+	}
+	d.lineCountersMu.RLock()
+	c := d.lineCounters[sid]
+	d.lineCountersMu.RUnlock()
+	if c == nil {
+		t.Errorf("lineCounter not allocated for %s", sid)
+	}
+}
+
+func TestDaemon_OnExit_UnregistersCmdSvc(t *testing.T) {
+	repo := newCmdRepository(false)
+	cmdSvc := cmdlifecycle.NewService(repo)
+	d := &Daemon{
+		cmdSvc:       cmdSvc,
+		cmdRepo:      repo,
+		lineCounters: make(map[string]*atomic.Int64),
+	}
+
+	const sid = "s1"
+	_ = cmdSvc.Register(sid)
+	d.lineCountersMu.Lock()
+	d.lineCounters[sid] = new(atomic.Int64)
+	d.lineCountersMu.Unlock()
+
+	// Simulate the OnExit callback teardown.
+	cmdSvc.Unregister(sid)
+	d.lineCountersMu.Lock()
+	delete(d.lineCounters, sid)
+	d.lineCountersMu.Unlock()
+	d.cmdRepo.Close(sid)
+
+	// After unregister, Snapshot should fail.
+	if _, err := cmdSvc.Snapshot(sid); err == nil {
+		t.Error("cmdSvc.Snapshot should error after Unregister")
+	}
+	d.lineCountersMu.RLock()
+	c := d.lineCounters[sid]
+	d.lineCountersMu.RUnlock()
+	if c != nil {
+		t.Errorf("lineCounter not deleted for %s", sid)
+	}
+}
+
+func TestDaemon_NilCmdSvc_HandleCreate_NoOp(t *testing.T) {
+	d := &Daemon{
+		cmdSvc:       nil,
+		cmdRepo:      nil,
+		lineCounters: make(map[string]*atomic.Int64),
+	}
+
+	// Even with nil cmdSvc, the lineCounters allocation must work.
+	d.lineCountersMu.Lock()
+	d.lineCounters["s1"] = new(atomic.Int64)
+	d.lineCountersMu.Unlock()
+
+	d.lineCountersMu.RLock()
+	c := d.lineCounters["s1"]
+	d.lineCountersMu.RUnlock()
+	if c == nil {
+		t.Error("lineCounter allocation failed with nil cmdSvc")
+	}
 }

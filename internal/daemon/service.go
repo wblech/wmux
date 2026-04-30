@@ -253,6 +253,15 @@ func (d *Daemon) Start(ctx context.Context) error {
 		d.notifyExitOnNonExitWaiters(id, exitCode)
 		d.persistSessionExit(id, exitCode)
 		d.closeRecording(id)
+		if d.cmdSvc != nil {
+			d.cmdSvc.Unregister(id)
+		}
+		d.lineCountersMu.Lock()
+		delete(d.lineCounters, id)
+		d.lineCountersMu.Unlock()
+		if d.cmdRepo != nil {
+			d.cmdRepo.Close(id)
+		}
 		d.publishEvent(event.Event{
 			Type:      event.SessionExited,
 			SessionID: id,
@@ -284,6 +293,10 @@ func (d *Daemon) Start(ctx context.Context) error {
 	err := d.server.Serve(childCtx)
 
 	cancel()
+
+	if d.cmdRepo != nil {
+		d.cmdRepo.CloseAll()
+	}
 
 	if d.pidFilePath != "" {
 		_ = RemovePIDFile(d.pidFilePath)
@@ -408,6 +421,18 @@ func (d *Daemon) handleCreate(c ConnectedClient, frame protocol.Frame) {
 	}
 
 	d.persistSessionCreate(req.ID, req)
+
+	if d.cmdSvc != nil {
+		_ = d.cmdSvc.Register(req.ID)
+	}
+	d.lineCountersMu.Lock()
+	d.lineCounters[req.ID] = new(atomic.Int64)
+	d.lineCountersMu.Unlock()
+
+	if d.cmdRepo != nil && d.dataDir != "" && d.coldRestore {
+		path := filepath.Join(d.dataDir, req.ID, "commands.json")
+		_ = d.cmdRepo.Open(req.ID, path)
+	}
 
 	_ = c.Control().WriteFrame(okFrame(sessionInfoToResponse(info)))
 
